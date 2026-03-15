@@ -1,18 +1,11 @@
-/**
- * TripleSeat OAuth 2.0 Authentication
- * 
- * Handles token acquisition and refresh using client_credentials grant.
- * OAuth 1.0 sunsets July 1, 2026 — this is built on 2.0 from day one.
- */
-
 const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
 
 interface TokenResponse {
   access_token: string;
   token_type: string;
   expires_in: number;
-  refresh_token?: string;
-  created_at?: number;
+  scope: string;
+  created_at: number;
 }
 
 interface CachedToken {
@@ -25,28 +18,17 @@ let cachedToken: CachedToken | null = null;
 function getCredentials() {
   const clientId = process.env.TRIPLESEAT_CLIENT_ID;
   const clientSecret = process.env.TRIPLESEAT_CLIENT_SECRET;
-
   if (!clientId || !clientSecret) {
-    throw new Error(
-      "Missing TripleSeat API credentials. Set TRIPLESEAT_CLIENT_ID and TRIPLESEAT_CLIENT_SECRET environment variables."
-    );
+    throw new Error("Missing TripleSeat API credentials. Set TRIPLESEAT_CLIENT_ID and TRIPLESEAT_CLIENT_SECRET environment variables.");
   }
-
   return { clientId, clientSecret };
 }
 
-/**
- * Get a valid access token, refreshing if expired.
- * Caches token in memory with a 5-minute buffer before expiry.
- */
 export async function getAccessToken(): Promise<string> {
-  // Return cached token if still valid (with 5 min buffer)
-  if (cachedToken && Date.now() < cachedToken.expires_at - 300_000) {
+  if (cachedToken && Date.now() < cachedToken.expires_at - 300000) {
     return cachedToken.access_token;
   }
-
   const { clientId, clientSecret } = getCredentials();
-
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -54,37 +36,25 @@ export async function getAccessToken(): Promise<string> {
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "client_credentials",
-      scope: "read",
+      scope: "read"
     }),
   });
-
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
-      `TripleSeat OAuth failed (${response.status}): ${errorText}`
-    );
+    throw new Error("TripleSeat OAuth failed (" + response.status + "): " + errorText);
   }
-
   const data: TokenResponse = await response.json();
-
   cachedToken = {
     access_token: data.access_token,
     expires_at: Date.now() + data.expires_in * 1000,
   };
-
   return cachedToken.access_token;
 }
 
-/**
- * Clear the cached token (useful for retry logic on 401s)
- */
 export function clearTokenCache(): void {
   cachedToken = null;
 }
 
-/**
- * Check if credentials are configured (without making a network call)
- */
 export function hasCredentials(): boolean {
   return !!(process.env.TRIPLESEAT_CLIENT_ID && process.env.TRIPLESEAT_CLIENT_SECRET);
 }
