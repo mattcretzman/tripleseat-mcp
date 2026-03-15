@@ -1,9 +1,14 @@
+/**
+ * TripleSeat MCP Server — Vercel Serverless Edition
+ *
+ * Handles JSON-RPC directly instead of using the SDK transport.
+ * Every request is self-contained — no sessions needed.
+ * This is the correct pattern for stateless serverless (Vercel, Lambda, etc.)
+ */
+
 import express from "express";
-import { randomUUID } from "crypto";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createServer } from "./server.js";
 import { hasCredentials } from "./auth.js";
+import { tripleseatGet } from "./tripleseat.js";
 
 const app = express();
 app.use(express.json());
@@ -29,73 +34,423 @@ app.get("/", (_req, res) => {
   });
 });
 
-// Session store — persists across warm Vercel invocations
-const sessions = new Map<string, { server: McpServer; transport: StreamableHTTPServerTransport }>();
+// ── Tool Definitions ──
+const TOOLS = [
+  {
+    name: "get_event",
+    description: "Get full event details from TripleSeat by event ID. Returns BEO data, packages, vendors, status, and optionally financial details.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        event_id: { type: "string", description: "The TripleSeat event ID" },
+        include_financials: { type: "boolean", description: "Include financial details", default: false }
+      },
+      required: ["event_id"]
+    }
+  },
+  {
+    name: "search_events",
+    description: "Search TripleSeat events by name, date range, status, or venue. Useful for finding specific weddings or checking what's happening in a time period.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search term (event name, client name)" },
+        status: { type: "string", enum: ["DEFINITE", "TENTATIVE", "PROSPECT", "CLOSED", "LOST"], description: "Filter by status" },
+        from_date: { type: "string", description: "Start date (MM/DD/YYYY)" },
+        to_date: { type: "string", description: "End date (MM/DD/YYYY)" },
+        location_id: { type: "string", description: "Filter by venue location ID" },
+        page: { type: "number", description: "Page number", default: 1 },
+        order: { type: "string", description: "Sort field", default: "event_start" },
+        sort_direction: { type: "string", enum: ["asc", "desc"], default: "desc" },
+        include_financials: { type: "boolean", default: false }
+      }
+    }
+  },
+  {
+    name: "list_upcoming_events",
+    description: "List all events in a date range. Great for 'what's coming up this week/month' and staffing planning.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        from_date: { type: "string", description: "Start date (MM/DD/YYYY)" },
+        to_date: { type: "string", description: "End date (MM/DD/YYYY)" },
+        location_id: { type: "string", description: "Filter to specific venue" },
+        include_financials: { type: "boolean", default: false }
+      },
+      required: ["from_date", "to_date"]
+    }
+  },
+  {
+    name: "check_availability",
+    description: "Check if a specific date is available at a venue by looking for existing events on that date.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        date: { type: "string", description: "Date to check (MM/DD/YYYY)" },
+        location_id: { type: "string", description: "Specific venue to check" }
+      },
+      required: ["date"]
+    }
+  },
+  {
+    name: "get_lead",
+    description: "Get full lead details — contact info, budget, date preferences, lead source, qualification data.",
+    inputSchema: {
+      type: "object",
+      properties: { lead_id: { type: "string", description: "The TripleSeat lead ID" } },
+      required: ["lead_id"]
+    }
+  },
+  {
+    name: "search_leads",
+    description: "Search leads by name, email, date, status, or location. For finding inquiries and checking the lead pipeline.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Search term — name, email, phone" },
+        status: { type: "string", description: "Lead status filter" },
+        location_id: { type: "string", description: "Filter by venue" },
+        from_date: { type: "string", description: "Created after (MM/DD/YYYY)" },
+        to_date: { type: "string", description: "Created before (MM/DD/YYYY)" },
+        page: { type: "number", default: 1 }
+      }
+    }
+  },
+  {
+    name: "list_recent_leads",
+    description: "Get the most recent leads. Good for checking latest inquiries and making sure nothing's fallen through the cracks.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        page: { type: "number", default: 1 },
+        location_id: { type: "string", description: "Filter by venue" }
+      }
+    }
+  },
+  {
+    name: "get_booking",
+    description: "Get booking details including financial data — payment status, balance due, package totals.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        booking_id: { type: "string", description: "The TripleSeat booking ID" },
+        include_financials: { type: "boolean", default: true }
+      },
+      required: ["booking_id"]
+    }
+  },
+  {
+    name: "search_bookings",
+    description: "Search bookings by date range or status. Use for revenue reporting and payment tracking.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string" },
+        from_date: { type: "string", description: "MM/DD/YYYY" },
+        to_date: { type: "string", description: "MM/DD/YYYY" },
+        page: { type: "number", default: 1 },
+        order: { type: "string", default: "created_at" },
+        sort_direction: { type: "string", enum: ["asc", "desc"], default: "desc" },
+        include_financials: { type: "boolean", default: false }
+      }
+    }
+  },
+  {
+    name: "get_contact",
+    description: "Get contact details — name, email, phone, associated account.",
+    inputSchema: {
+      type: "object",
+      properties: { contact_id: { type: "string" } },
+      required: ["contact_id"]
+    }
+  },
+  {
+    name: "search_contacts",
+    description: "Search contacts by name, email, or phone.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string" }, page: { type: "number", default: 1 } },
+      required: ["query"]
+    }
+  },
+  {
+    name: "get_account",
+    description: "Get account details — business name, contacts, associated events.",
+    inputSchema: {
+      type: "object",
+      properties: { account_id: { type: "string" } },
+      required: ["account_id"]
+    }
+  },
+  {
+    name: "search_accounts",
+    description: "Search accounts by name or email.",
+    inputSchema: {
+      type: "object",
+      properties: { query: { type: "string" }, page: { type: "number", default: 1 } },
+      required: ["query"]
+    }
+  },
+  {
+    name: "list_sites",
+    description: "List all sites (top-level venue groups).",
+    inputSchema: { type: "object", properties: {} }
+  },
+  {
+    name: "list_locations",
+    description: "List all venue locations and their rooms/areas. Returns Knotting Hill Place and Brighton Abbey with spaces and capacities.",
+    inputSchema: { type: "object", properties: {} }
+  },
+  {
+    name: "get_location",
+    description: "Get details for a specific venue location — address, rooms, capacity.",
+    inputSchema: {
+      type: "object",
+      properties: { location_id: { type: "string" } },
+      required: ["location_id"]
+    }
+  },
+  {
+    name: "list_users",
+    description: "List all TripleSeat users (team members).",
+    inputSchema: { type: "object", properties: {} }
+  }
+];
 
+// ── Tool Execution ──
+async function executeTool(name: string, args: any): Promise<string> {
+  const params: Record<string, string> = {};
+
+  switch (name) {
+    case "get_event": {
+      if (args.include_financials) params.show_financial = "true";
+      const { data } = await tripleseatGet(`/events/${args.event_id}`, params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "search_events": {
+      if (args.query) params.query = args.query;
+      if (args.status) params.status = args.status;
+      if (args.from_date) params.from_date = args.from_date;
+      if (args.to_date) params.to_date = args.to_date;
+      if (args.location_id) params.location_id = args.location_id;
+      if (args.page) params.page = String(args.page);
+      if (args.order) params.order = args.order;
+      if (args.sort_direction) params.sort_direction = args.sort_direction;
+      if (args.include_financials) params.show_financial = "true";
+      const { data } = await tripleseatGet("/events/search", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "list_upcoming_events": {
+      params.from_date = args.from_date;
+      params.to_date = args.to_date;
+      params.order = "event_start";
+      params.sort_direction = "asc";
+      if (args.location_id) params.location_id = args.location_id;
+      if (args.include_financials) params.show_financial = "true";
+      const { data } = await tripleseatGet("/events/search", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "check_availability": {
+      params.from_date = args.date;
+      params.to_date = args.date;
+      params.order = "event_start";
+      params.sort_direction = "asc";
+      if (args.location_id) params.location_id = args.location_id;
+      const { data } = await tripleseatGet("/events/search", params);
+      const events = Array.isArray(data) ? data : (data as any)?.results || [];
+      const summary = events.length === 0
+        ? `No events found on ${args.date}. The date appears to be available.`
+        : `Found ${events.length} event(s) on ${args.date}.`;
+      return summary + "\n" + JSON.stringify(data, null, 2);
+    }
+    case "get_lead": {
+      const { data } = await tripleseatGet(`/leads/${args.lead_id}`);
+      return JSON.stringify(data, null, 2);
+    }
+    case "search_leads": {
+      if (args.query) params.query = args.query;
+      if (args.status) params.status = args.status;
+      if (args.location_id) params.location_id = args.location_id;
+      if (args.from_date) params.from_date = args.from_date;
+      if (args.to_date) params.to_date = args.to_date;
+      if (args.page) params.page = String(args.page);
+      const { data } = await tripleseatGet("/leads/search", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "list_recent_leads": {
+      if (args.page) params.page = String(args.page);
+      if (args.location_id) params.location_id = args.location_id;
+      const { data } = await tripleseatGet("/leads", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "get_booking": {
+      if (args.include_financials !== false) params.show_financial = "true";
+      const { data } = await tripleseatGet(`/bookings/${args.booking_id}`, params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "search_bookings": {
+      if (args.query) params.query = args.query;
+      if (args.from_date) params.from_date = args.from_date;
+      if (args.to_date) params.to_date = args.to_date;
+      if (args.page) params.page = String(args.page);
+      if (args.order) params.order = args.order;
+      if (args.sort_direction) params.sort_direction = args.sort_direction;
+      if (args.include_financials) params.show_financial = "true";
+      const { data } = await tripleseatGet("/bookings/search", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "get_contact": {
+      const { data } = await tripleseatGet(`/contacts/${args.contact_id}`);
+      return JSON.stringify(data, null, 2);
+    }
+    case "search_contacts": {
+      params.query = args.query;
+      if (args.page) params.page = String(args.page);
+      const { data } = await tripleseatGet("/contacts/search", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "get_account": {
+      const { data } = await tripleseatGet(`/accounts/${args.account_id}`);
+      return JSON.stringify(data, null, 2);
+    }
+    case "search_accounts": {
+      params.query = args.query;
+      if (args.page) params.page = String(args.page);
+      const { data } = await tripleseatGet("/accounts/search", params);
+      return JSON.stringify(data, null, 2);
+    }
+    case "list_sites": {
+      const { data } = await tripleseatGet("/sites");
+      return JSON.stringify(data, null, 2);
+    }
+    case "list_locations": {
+      const { data } = await tripleseatGet("/locations");
+      return JSON.stringify(data, null, 2);
+    }
+    case "get_location": {
+      const { data } = await tripleseatGet(`/locations/${args.location_id}`);
+      return JSON.stringify(data, null, 2);
+    }
+    case "list_users": {
+      const { data } = await tripleseatGet("/users");
+      return JSON.stringify(data, null, 2);
+    }
+    default:
+      throw new Error(`Unknown tool: ${name}`);
+  }
+}
+
+// ── Server Info ──
+const SERVER_INFO = {
+  name: "tripleseat",
+  version: "1.0.0",
+};
+
+const SERVER_INSTRUCTIONS = `You are connected to TripleSeat, a CRM and event management platform for wedding and event venues. This server provides live read access to event data, leads, bookings, contacts, accounts, and venue locations.
+
+Key context for this installation:
+- Two venues: Knotting Hill Place and Brighton Abbey (both in the DFW area, ~10 minutes apart)
+- The team handles ~700 inbound leads per month, booking 40-50 weddings
+- Events always have at least: a booking, account, contact, location, and room
+- Financial data is available on events and bookings when requested
+- Use location IDs to filter results by venue when the user asks about a specific property
+
+When answering questions:
+- Be specific with dates, names, and numbers pulled from the data
+- Flag any missing or incomplete fields — data quality visibility is a feature
+- If a search returns no results, suggest broadening the query
+- For availability checks, always check both venues unless told otherwise`;
+
+// ── JSON-RPC Handler ──
+function jsonrpcResponse(id: any, result: any) {
+  return { jsonrpc: "2.0", id, result };
+}
+
+function jsonrpcError(id: any, code: number, message: string) {
+  return { jsonrpc: "2.0", id, error: { code, message } };
+}
+
+async function handleMessage(msg: any): Promise<any> {
+  const { method, id, params } = msg;
+
+  switch (method) {
+    case "initialize":
+      return jsonrpcResponse(id, {
+        protocolVersion: "2025-03-26",
+        capabilities: { tools: { listChanged: false } },
+        serverInfo: SERVER_INFO,
+        instructions: SERVER_INSTRUCTIONS,
+      });
+
+    case "notifications/initialized":
+      return null; // Notification — no response
+
+    case "ping":
+      return jsonrpcResponse(id, {});
+
+    case "tools/list":
+      return jsonrpcResponse(id, { tools: TOOLS });
+
+    case "tools/call": {
+      const toolName = params?.name;
+      const toolArgs = params?.arguments || {};
+      try {
+        const result = await executeTool(toolName, toolArgs);
+        return jsonrpcResponse(id, {
+          content: [{ type: "text", text: result }],
+        });
+      } catch (error: any) {
+        return jsonrpcResponse(id, {
+          content: [{ type: "text", text: `Error: ${error.message}` }],
+          isError: true,
+        });
+      }
+    }
+
+    default:
+      return jsonrpcError(id, -32601, `Method not found: ${method}`);
+  }
+}
+
+// ── MCP Endpoint ──
 app.post("/mcp", async (req, res) => {
   try {
-    const sessionId = req.headers["mcp-session-id"] as string | undefined;
-    let session = sessionId ? sessions.get(sessionId) : undefined;
+    const body = req.body;
 
-    if (session) {
-      // Existing session — reuse transport
-      await session.transport.handleRequest(req, res, req.body);
+    // Handle batch requests
+    if (Array.isArray(body)) {
+      const results = await Promise.all(body.map(handleMessage));
+      const responses = results.filter((r) => r !== null);
+      if (responses.length === 0) {
+        res.status(202).end();
+      } else {
+        res.json(responses);
+      }
       return;
     }
 
-    // New session — create server + transport
-    const server = createServer();
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
-    });
-
-    transport.onclose = () => {
-      const sid = transport.sessionId;
-      if (sid) sessions.delete(sid);
-    };
-
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-
-    // Store session after successful init
-    const newSessionId = transport.sessionId;
-    if (newSessionId) {
-      sessions.set(newSessionId, { server, transport });
+    // Single request
+    const result = await handleMessage(body);
+    if (result === null) {
+      res.status(202).end();
+    } else {
+      res.json(result);
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("[MCP Error]", error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        jsonrpc: "2.0",
-        error: { code: -32603, message: "Internal server error" },
-        id: null,
-      });
-    }
+    res.status(500).json(jsonrpcError(null, -32603, "Internal server error"));
   }
 });
 
-app.get("/mcp", async (req, res) => {
-  const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  const session = sessionId ? sessions.get(sessionId) : undefined;
-  if (!session) {
-    res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "No session. Send initialize first." }, id: null });
-    return;
-  }
-  await session.transport.handleRequest(req, res);
+app.get("/mcp", (_req, res) => {
+  res.status(405).json(jsonrpcError(null, -32000, "Use POST for MCP requests"));
 });
 
-app.delete("/mcp", async (req, res) => {
-  const sessionId = req.headers["mcp-session-id"] as string | undefined;
-  if (sessionId) {
-    const session = sessions.get(sessionId);
-    if (session) {
-      await session.transport.close();
-      sessions.delete(sessionId);
-    }
-  }
+app.delete("/mcp", (_req, res) => {
   res.status(200).json({ ok: true });
 });
 
+// ── Start ──
 const PORT = process.env.PORT || 3000;
 if (process.env.VERCEL !== "1") {
   app.listen(PORT, () => {
