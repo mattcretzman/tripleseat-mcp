@@ -1,25 +1,16 @@
 "use strict";
-/**
- * TripleSeat MCP Server — Entry Point
- *
- * Express app exposing a single /mcp endpoint via Streamable HTTP transport.
- * Stateless mode for Vercel serverless compatibility.
- *
- * Local: node dist/index.js (listens on PORT, default 3000)
- * Vercel: auto-detected via serverless function export
- */
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
+const crypto_1 = require("crypto");
 const streamableHttp_js_1 = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const server_js_1 = require("./server.js");
 const auth_js_1 = require("./auth.js");
 const app = (0, express_1.default)();
-// Parse JSON bodies for POST requests
 app.use(express_1.default.json());
-// CORS — Claude.ai needs this to talk to our server
+// CORS
 app.use((req, res, next) => {
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
@@ -41,75 +32,73 @@ app.get("/", (_req, res) => {
         endpoint: "/mcp",
     });
 });
-// ── MCP Endpoint ──
-// Stateless: each request gets a fresh transport + server connection.
-// This is the pattern for serverless (Vercel, Cloudflare, etc.)
+// Session store — persists across warm Vercel invocations
+const sessions = new Map();
 app.post("/mcp", async (req, res) => {
     try {
+        const sessionId = req.headers["mcp-session-id"];
+        let session = sessionId ? sessions.get(sessionId) : undefined;
+        if (session) {
+            // Existing session — reuse transport
+            await session.transport.handleRequest(req, res, req.body);
+            return;
+        }
+        // New session — create server + transport
         const server = (0, server_js_1.createServer)();
         const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined, // Stateless — no sessions
+            sessionIdGenerator: () => (0, crypto_1.randomUUID)(),
         });
-        // Wire up error logging
-        transport.onerror = (error) => {
-            console.error("[MCP Transport Error]", error);
+        transport.onclose = () => {
+            const sid = transport.sessionId;
+            if (sid)
+                sessions.delete(sid);
         };
-        // Connect server to transport
         await server.connect(transport);
-        // Let the transport handle the request
         await transport.handleRequest(req, res, req.body);
+        // Store session after successful init
+        const newSessionId = transport.sessionId;
+        if (newSessionId) {
+            sessions.set(newSessionId, { server, transport });
+        }
     }
     catch (error) {
-        console.error("[MCP Request Error]", error);
+        console.error("[MCP Error]", error);
         if (!res.headersSent) {
             res.status(500).json({
                 jsonrpc: "2.0",
-                error: {
-                    code: -32603,
-                    message: "Internal server error",
-                },
+                error: { code: -32603, message: "Internal server error" },
                 id: null,
             });
         }
     }
 });
 app.get("/mcp", async (req, res) => {
-    try {
-        const server = (0, server_js_1.createServer)();
-        const transport = new streamableHttp_js_1.StreamableHTTPServerTransport({
-            sessionIdGenerator: undefined,
-        });
-        await server.connect(transport);
-        await transport.handleRequest(req, res);
+    const sessionId = req.headers["mcp-session-id"];
+    const session = sessionId ? sessions.get(sessionId) : undefined;
+    if (!session) {
+        res.status(400).json({ jsonrpc: "2.0", error: { code: -32000, message: "No session. Send initialize first." }, id: null });
+        return;
     }
-    catch (error) {
-        console.error("[MCP GET Error]", error);
-        if (!res.headersSent) {
-            res.status(500).json({
-                jsonrpc: "2.0",
-                error: {
-                    code: -32603,
-                    message: "Internal server error",
-                },
-                id: null,
-            });
-        }
-    }
+    await session.transport.handleRequest(req, res);
 });
 app.delete("/mcp", async (req, res) => {
-    // Stateless mode — no sessions to terminate
+    const sessionId = req.headers["mcp-session-id"];
+    if (sessionId) {
+        const session = sessions.get(sessionId);
+        if (session) {
+            await session.transport.close();
+            sessions.delete(sessionId);
+        }
+    }
     res.status(200).json({ ok: true });
 });
-// ── Start (local dev) ──
 const PORT = process.env.PORT || 3000;
-// Only listen when running directly (not imported by Vercel)
 if (process.env.VERCEL !== "1") {
     app.listen(PORT, () => {
         console.log(`\n🔌 TripleSeat MCP Server running on http://localhost:${PORT}`);
         console.log(`   MCP endpoint: http://localhost:${PORT}/mcp`);
-        console.log(`   Credentials: ${(0, auth_js_1.hasCredentials)() ? "✅ configured" : "❌ missing — set TRIPLESEAT_CLIENT_ID and TRIPLESEAT_CLIENT_SECRET"}`);
+        console.log(`   Credentials: ${(0, auth_js_1.hasCredentials)() ? "✅ configured" : "❌ missing"}`);
         console.log();
     });
 }
-// Export for Vercel serverless
 exports.default = app;
