@@ -1,0 +1,90 @@
+# TripleSeat MCP Server
+
+Connects Claude AI to TripleSeat CRM via the Model Context Protocol. Your team asks questions in plain English — Claude queries TripleSeat in real time and answers.
+
+Built for **Knotting Hill Place** and **Brighton Abbey** by [Stormbreaker Digital](mailto:matt@stormbreakerdigital.com).
+
+## What It Does
+
+15 read tools across 6 domains:
+
+| Domain | Tools | Examples |
+|--------|-------|---------|
+| **Events** | `get_event`, `search_events`, `list_upcoming_events`, `check_availability` | "What's the beverage package for the Martinez wedding?" |
+| **Leads** | `get_lead`, `search_leads`, `list_recent_leads` | "Show me all leads from the last 7 days" |
+| **Bookings** | `get_booking`, `search_bookings` | "What's the balance due on the Johnson booking?" |
+| **Contacts** | `get_contact`, `search_contacts` | "Find me Sarah Chen's contact info" |
+| **Accounts** | `get_account`, `search_accounts` | "Pull up the Riverside Corp account" |
+| **Locations** | `list_sites`, `list_locations`, `get_location`, `list_users` | "Show me all rooms at Brighton Abbey" |
+
+## Setup
+
+### 1. Get TripleSeat API Credentials
+
+In TripleSeat: **Settings → API/Webhooks → OAuth 2.0 Client Applications → + New Application**
+
+You need the **Client ID** and **Client Secret**.
+
+### 2. Deploy to Vercel
+
+```bash
+# Clone the repo
+git clone https://github.com/YOUR_ORG/tripleseat-mcp.git
+cd tripleseat-mcp
+
+# Install and build
+npm install
+npm run build
+
+# Deploy
+vercel deploy --prod
+```
+
+Set environment variables in Vercel:
+- `TRIPLESEAT_CLIENT_ID` → your Client ID
+- `TRIPLESEAT_CLIENT_SECRET` → your Client Secret
+
+### 3. Connect to Claude
+
+In Claude.ai: **Settings → Connectors → Add Custom Connector**
+
+Paste your Vercel URL: `https://your-app.vercel.app/mcp`
+
+Done. Every team member on the workspace gets access automatically.
+
+## Local Development
+
+```bash
+cp .env.example .env
+# Fill in your credentials
+
+npm install
+npm run build
+npm start
+# Server runs at http://localhost:3000/mcp
+```
+
+## Architecture
+
+```
+Claude.ai ←→ /mcp endpoint ←→ TripleSeat REST API
+                  ↑
+          Streamable HTTP transport
+          OAuth 2.0 token management
+          Stateless (Vercel-compatible)
+```
+
+- **Transport**: Streamable HTTP (MCP spec 2025-03-26)
+- **Auth**: OAuth 2.0 client_credentials grant with auto-refresh
+- **Hosting**: Vercel serverless functions
+- **Stateless**: Each request is independent — scales horizontally
+
+## Phase 2 (Coming Soon)
+
+Write tools: `create_lead`, `update_event`, `update_booking`, `create_contact`, `add_discussion`
+
+Webhooks: New lead alerts, 48-hour response monitor, BEO completeness checker
+
+---
+
+**Questions?** matt@stormbreakerdigital.com
