@@ -5,7 +5,7 @@
  * OAuth 1.0 sunsets July 1, 2026 — this is built on 2.0 from day one.
  */
 
-const TOKEN_URL = "https://api.tripleseat.com/oauth/token";
+const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
 
 interface TokenResponse {
   access_token: string;
@@ -54,6 +54,7 @@ export async function getAccessToken(): Promise<string> {
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "client_credentials",
+      scope: "read",
     }),
   });
 

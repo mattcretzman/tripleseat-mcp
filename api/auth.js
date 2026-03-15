@@ -9,7 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAccessToken = getAccessToken;
 exports.clearTokenCache = clearTokenCache;
 exports.hasCredentials = hasCredentials;
-const TOKEN_URL = "https://api.tripleseat.com/oauth/token";
+const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
 let cachedToken = null;
 function getCredentials() {
     const clientId = process.env.TRIPLESEAT_CLIENT_ID;
@@ -36,6 +36,7 @@ async function getAccessToken() {
             client_id: clientId,
             client_secret: clientSecret,
             grant_type: "client_credentials",
+            scope: "read",
         }),
     });
     if (!response.ok) {
