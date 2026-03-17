@@ -41,11 +41,24 @@ export async function getAccessToken(): Promise<string> {
       grant_type: "client_credentials",
     }),
   });
+  const responseText = await response.text();
+
   if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error("TripleSeat OAuth failed (" + response.status + "): " + errorText);
+    throw new Error("TripleSeat OAuth failed (" + response.status + "): " + responseText.substring(0, 500));
   }
-  const data: TokenResponse = await response.json();
+
+  if (responseText.trimStart().startsWith("<")) {
+    throw new Error(
+      "TripleSeat OAuth returned HTML instead of JSON (status " + response.status + "). URL: " + TOKEN_URL + ". First 300 chars: " + responseText.substring(0, 300)
+    );
+  }
+
+  let data: TokenResponse;
+  try {
+    data = JSON.parse(responseText);
+  } catch (e) {
+    throw new Error("TripleSeat OAuth returned invalid JSON (status " + response.status + "): " + responseText.substring(0, 300));
+  }
   cachedToken = {
     access_token: data.access_token,
     expires_at: Date.now() + (data.expires_in || 7200) * 1000,
