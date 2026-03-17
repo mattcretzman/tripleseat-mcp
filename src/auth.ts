@@ -1,11 +1,13 @@
-const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
+// Per TripleSeat docs: https://support.tripleseat.com/hc/en-us/articles/19394408627479
+// The correct endpoint is /oauth/token (NOT /oauth2/token)
+const TOKEN_URL = "https://api.tripleseat.com/oauth/token";
 
 interface TokenResponse {
   access_token: string;
   token_type: string;
-  expires_in: number;
-  scope: string;
-  created_at: number;
+  expires_in?: number;
+  scope?: string;
+  created_at?: number;
 }
 
 interface CachedToken {
@@ -32,11 +34,11 @@ export async function getAccessToken(): Promise<string> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    // Per TripleSeat docs: only client_id, client_secret, grant_type — no scope
     body: JSON.stringify({
       client_id: clientId,
       client_secret: clientSecret,
       grant_type: "client_credentials",
-      scope: "read"
     }),
   });
   if (!response.ok) {
@@ -46,7 +48,7 @@ export async function getAccessToken(): Promise<string> {
   const data: TokenResponse = await response.json();
   cachedToken = {
     access_token: data.access_token,
-    expires_at: Date.now() + data.expires_in * 1000,
+    expires_at: Date.now() + (data.expires_in || 7200) * 1000,
   };
   return cachedToken.access_token;
 }

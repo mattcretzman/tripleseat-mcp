@@ -2,19 +2,16 @@
   "name": "tripleseat-mcp",
   "version": "1.0.0",
   "description": "MCP server connecting Claude to TripleSeat CRM for venue operations",
-  "main": "dist/index.js",
+  "main": "api/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsc --watch & node --watch dist/index.js"
+    "start": "node api/index.js"
   },
   "keywords": ["mcp", "tripleseat", "claude", "venues"],
   "author": "Stormbreaker Digital",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.27.1",
-    "express": "^4.21.0",
-    "zod": "^3.24.0"
+    "express": "^4.21.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
