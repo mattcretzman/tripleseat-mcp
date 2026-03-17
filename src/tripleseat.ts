@@ -71,14 +71,22 @@ export async function tripleseatRequest<T = any>(
     response = await makeRequest(token);
   }
 
+  const responseText = await response.text();
+
   if (!response.ok) {
-    const errorText = await response.text();
     throw new Error(
-      `TripleSeat API error (${response.status} ${response.statusText}): ${errorText}`
+      `TripleSeat API error (${response.status} ${response.statusText}): ${responseText.substring(0, 500)}`
     );
   }
 
-  const data = await response.json();
+  // Guard against HTML responses (redirects, error pages)
+  if (responseText.trimStart().startsWith("<")) {
+    throw new Error(
+      `TripleSeat returned HTML instead of JSON for ${url.pathname} (status ${response.status}). First 300 chars: ${responseText.substring(0, 300)}`
+    );
+  }
+
+  const data = JSON.parse(responseText);
   return { data: data as T, status: response.status };
 }
 
