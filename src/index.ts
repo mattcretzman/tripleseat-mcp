@@ -7,6 +7,7 @@
  */
 
 import express from "express";
+import cookieParser from "cookie-parser";
 import {
   hasCredentials,
   hasRefreshToken,
@@ -14,14 +15,19 @@ import {
   exchangeCodeForTokens,
 } from "./auth.js";
 import { tripleseatGet } from "./tripleseat.js";
+import { apiKeyAuth } from "./middleware.js";
+import { adminRouter } from "./admin/routes.js";
+import { logToolCall } from "./usage.js";
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 // CORS
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, PATCH");
   res.header("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, Mcp-Session-Id, Last-Event-ID");
   res.header("Access-Control-Expose-Headers", "Content-Type, Mcp-Session-Id");
   if (req.method === "OPTIONS") { res.sendStatus(204); return; }
@@ -44,6 +50,9 @@ app.get("/", (_req, res) => {
     setup: status === "needs_oauth_setup" ? "/auth/login" : undefined,
   });
 });
+
+// ── Admin Dashboard ──
+app.use("/admin", adminRouter);
 
 // ── OAuth Setup Routes (one-time) ──
 
@@ -457,7 +466,7 @@ function jsonrpcError(id: any, code: number, message: string) {
   return { jsonrpc: "2.0", id, error: { code, message } };
 }
 
-async function handleMessage(msg: any): Promise<any> {
+async function handleMessage(msg: any, req: express.Request): Promise<any> {
   const { method, id, params } = msg;
 
   switch (method) {
@@ -475,18 +484,44 @@ async function handleMessage(msg: any): Promise<any> {
     case "ping":
       return jsonrpcResponse(id, {});
 
-    case "tools/list":
-      return jsonrpcResponse(id, { tools: TOOLS });
+    case "tools/list": {
+      let tools = TOOLS;
+      // If request has an API key with role, filter tools to allowed_tools
+      if (req.hasApiKey && req.role?.allowed_tools) {
+        const allowed = new Set(req.role.allowed_tools);
+        tools = TOOLS.filter((t) => allowed.has(t.name));
+      }
+      return jsonrpcResponse(id, { tools });
+    }
 
     case "tools/call": {
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
+
+      // Check tool access if API key is present
+      if (req.hasApiKey && req.role?.allowed_tools) {
+        if (!req.role.allowed_tools.includes(toolName)) {
+          return jsonrpcError(id, -32001, `Tool "${toolName}" is not allowed for your role "${req.role.name}"`);
+        }
+      }
+
+      const startTime = Date.now();
       try {
         const result = await executeTool(toolName, toolArgs);
+        const durationMs = Date.now() - startTime;
+
+        // Fire-and-forget usage logging
+        logToolCall(req.apiKeyId || null, toolName, toolArgs, true, undefined, durationMs);
+
         return jsonrpcResponse(id, {
           content: [{ type: "text", text: result }],
         });
       } catch (error: any) {
+        const durationMs = Date.now() - startTime;
+
+        // Fire-and-forget usage logging
+        logToolCall(req.apiKeyId || null, toolName, toolArgs, false, error.message, durationMs);
+
         return jsonrpcResponse(id, {
           content: [{ type: "text", text: `Error: ${error.message}` }],
           isError: true,
@@ -500,13 +535,13 @@ async function handleMessage(msg: any): Promise<any> {
 }
 
 // ── MCP Endpoint ──
-app.post("/mcp", async (req, res) => {
+app.post("/mcp", apiKeyAuth, async (req, res) => {
   try {
     const body = req.body;
 
     // Handle batch requests
     if (Array.isArray(body)) {
-      const results = await Promise.all(body.map(handleMessage));
+      const results = await Promise.all(body.map((msg: any) => handleMessage(msg, req)));
       const responses = results.filter((r) => r !== null);
       if (responses.length === 0) {
         res.status(202).end();
@@ -517,7 +552,7 @@ app.post("/mcp", async (req, res) => {
     }
 
     // Single request
-    const result = await handleMessage(body);
+    const result = await handleMessage(body, req);
     if (result === null) {
       res.status(202).end();
     } else {
@@ -543,6 +578,7 @@ if (process.env.VERCEL !== "1") {
   app.listen(PORT, () => {
     console.log(`\n🔌 TripleSeat MCP Server running on http://localhost:${PORT}`);
     console.log(`   MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`   Admin panel: http://localhost:${PORT}/admin/login`);
     console.log(`   Credentials: ${hasCredentials() ? "✅ configured" : "❌ missing"}`);
     console.log();
   });
