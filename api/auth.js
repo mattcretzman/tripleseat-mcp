@@ -23,12 +23,8 @@ exports.clearTokenCache = clearTokenCache;
 exports.hasCredentials = hasCredentials;
 exports.hasRefreshToken = hasRefreshToken;
 const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
-// Authorize endpoint lives on the customer subdomain (e.g. 4428.tripleseat.com)
-// NOT on api.tripleseat.com or login.tripleseat.com
-function getAuthorizeBaseUrl() {
-    const subdomain = process.env.TRIPLESEAT_SUBDOMAIN || "4428";
-    return "https://" + subdomain + ".tripleseat.com/oauth2/authorize";
-}
+// Authorize endpoint is on login.tripleseat.com
+const AUTHORIZE_URL = "https://login.tripleseat.com/oauth2/authorize";
 let cachedToken = null;
 function getCredentials() {
     const clientId = process.env.TRIPLESEAT_CLIENT_ID;
@@ -49,7 +45,7 @@ function getAuthorizeUrl(redirectUri) {
         response_type: "code",
         scope: "read",
     });
-    return getAuthorizeBaseUrl() + "?" + params.toString();
+    return AUTHORIZE_URL + "?" + params.toString();
 }
 /**
  * Exchange an authorization code for access + refresh tokens.
