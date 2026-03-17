@@ -29,13 +29,84 @@ app.use((req, res, next) => {
 });
 // Health check
 app.get("/", (_req, res) => {
+    const status = !(0, auth_js_1.hasCredentials)()
+        ? "missing_credentials"
+        : !(0, auth_js_1.hasRefreshToken)()
+            ? "needs_oauth_setup"
+            : "ready";
     res.json({
         name: "tripleseat-mcp",
-        version: "1.0.0",
-        status: (0, auth_js_1.hasCredentials)() ? "ready" : "missing_credentials",
+        version: "2.0.0",
+        status,
         transport: "streamable-http",
         endpoint: "/mcp",
+        setup: status === "needs_oauth_setup" ? "/auth/login" : undefined,
     });
+});
+// ── OAuth Setup Routes (one-time) ──
+// Step 1: Redirect user to TripleSeat to authorize
+app.get("/auth/login", (req, res) => {
+    const host = req.headers.host || "tripleseat-mcp.vercel.app";
+    const protocol = req.headers["x-forwarded-proto"] || "https";
+    const redirectUri = protocol + "://" + host + "/auth/callback";
+    const authorizeUrl = (0, auth_js_1.getAuthorizeUrl)(redirectUri);
+    res.redirect(authorizeUrl);
+});
+// Step 2: TripleSeat redirects back here with a code
+app.get("/auth/callback", async (req, res) => {
+    const code = req.query.code;
+    const error = req.query.error;
+    if (error) {
+        res.status(400).send("<h1>Authorization Failed</h1><p>Error: " + error + "</p>" +
+            "<p>" + (req.query.error_description || "") + "</p>");
+        return;
+    }
+    if (!code) {
+        res.status(400).send("<h1>Missing authorization code</h1>");
+        return;
+    }
+    try {
+        const host = req.headers.host || "tripleseat-mcp.vercel.app";
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const redirectUri = protocol + "://" + host + "/auth/callback";
+        const tokens = await (0, auth_js_1.exchangeCodeForTokens)(code, redirectUri);
+        // Show the refresh token for the user to copy into Vercel env vars
+        res.send(`<!DOCTYPE html>
+<html><head><title>TripleSeat MCP - OAuth Setup Complete</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; }
+  .token-box { background: #f0f0f0; padding: 16px; border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 14px; margin: 12px 0; }
+  .success { color: #16a34a; }
+  .step { margin: 20px 0; padding: 16px; background: #f8f8f8; border-left: 4px solid #0057ff; }
+  h1 { color: #111; }
+  code { background: #e5e5e5; padding: 2px 6px; border-radius: 4px; }
+</style></head>
+<body>
+  <h1 class="success">OAuth Setup Complete!</h1>
+  <p>TripleSeat authorized the Stormbreaker app. Here are your tokens:</p>
+
+  <h3>Refresh Token (save this):</h3>
+  <div class="token-box">${tokens.refresh_token || "NOT PROVIDED"}</div>
+
+  <h3>Access Token (for testing, expires in ${tokens.expires_in || "?"}s):</h3>
+  <div class="token-box">${tokens.access_token}</div>
+
+  <h3>Scope:</h3>
+  <div class="token-box">${tokens.scope || "not specified"}</div>
+
+  <hr style="margin: 30px 0;">
+  <h2>Next Step: Add to Vercel</h2>
+  <div class="step">
+    <p><strong>1.</strong> Go to <a href="https://vercel.com/mcretzman-9359s-projects/tripleseat-mcp/settings/environment-variables" target="_blank">Vercel Environment Variables</a></p>
+    <p><strong>2.</strong> Add (or update) this variable:</p>
+    <p><code>TRIPLESEAT_REFRESH_TOKEN</code> = the refresh token above</p>
+    <p><strong>3.</strong> Redeploy the project (push a commit or click "Redeploy" in Vercel)</p>
+  </div>
+</body></html>`);
+    }
+    catch (err) {
+        res.status(500).send("<h1>Token Exchange Failed</h1><pre>" + err.message + "</pre>");
+    }
 });
 // ── Tool Definitions ──
 const TOOLS = [
