@@ -3,9 +3,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAccessToken = getAccessToken;
 exports.clearTokenCache = clearTokenCache;
 exports.hasCredentials = hasCredentials;
-// Per TripleSeat docs: https://support.tripleseat.com/hc/en-us/articles/19394408627479
-// The correct endpoint is /oauth/token (NOT /oauth2/token)
-const TOKEN_URL = "https://api.tripleseat.com/oauth/token";
+// Verified: /oauth2/token returns proper JSON OAuth2 responses
+// /oauth/token returns an HTML login page — NOT the API endpoint
+const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
 let cachedToken = null;
 function getCredentials() {
     const clientId = process.env.TRIPLESEAT_CLIENT_ID;
