@@ -23,7 +23,8 @@ exports.clearTokenCache = clearTokenCache;
 exports.hasCredentials = hasCredentials;
 exports.hasRefreshToken = hasRefreshToken;
 const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
-const AUTHORIZE_URL = "https://api.tripleseat.com/oauth2/authorize";
+// Authorize lives on login.tripleseat.com, NOT api.tripleseat.com
+const AUTHORIZE_URL = "https://login.tripleseat.com/oauth2/authorize";
 let cachedToken = null;
 function getCredentials() {
     const clientId = process.env.TRIPLESEAT_CLIENT_ID;

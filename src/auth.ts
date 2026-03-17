@@ -16,7 +16,8 @@
  */
 
 const TOKEN_URL = "https://api.tripleseat.com/oauth2/token";
-const AUTHORIZE_URL = "https://api.tripleseat.com/oauth2/authorize";
+// Authorize lives on login.tripleseat.com, NOT api.tripleseat.com
+const AUTHORIZE_URL = "https://login.tripleseat.com/oauth2/authorize";
 
 interface TokenResponse {
   access_token: string;
