@@ -1,26 +1,43 @@
 /**
- * Supabase client — singleton instance for all DB operations.
+ * PostgreSQL client — singleton pool for all DB operations.
  */
 
-import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import pg from "pg";
+const { Pool } = pg;
 
-let client: SupabaseClient | null = null;
+let pool: pg.Pool | null = null;
 
-export function getSupabase(): SupabaseClient {
-  if (client) return client;
+function getPool(): pg.Pool {
+  if (pool) return pool;
 
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url || !key) {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
     throw new Error(
-      "Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables."
+      "Missing DATABASE_URL environment variable."
     );
   }
 
-  client = createClient(url, key, {
-    auth: { autoRefreshToken: false, persistSession: false },
+  pool = new Pool({
+    connectionString,
+    max: 3,
+    ssl: { rejectUnauthorized: false },
   });
 
-  return client;
+  return pool;
+}
+
+export async function query<T = any>(
+  text: string,
+  params?: any[]
+): Promise<T[]> {
+  const result = await getPool().query(text, params);
+  return result.rows as T[];
+}
+
+export async function queryOne<T = any>(
+  text: string,
+  params?: any[]
+): Promise<T | null> {
+  const rows = await query<T>(text, params);
+  return rows[0] || null;
 }

@@ -11,111 +11,96 @@ const db_js_1 = require("./db.js");
  * Log a tool call (fire and forget — caller should not await).
  */
 function logToolCall(apiKeyId, toolName, args, success, errorMessage, durationMs) {
-    const db = (0, db_js_1.getSupabase)();
-    db.from("mcp_usage_logs")
-        .insert({
-        api_key_id: apiKeyId,
-        tool_name: toolName,
-        args,
-        success,
-        error_message: errorMessage || null,
-        duration_ms: durationMs || null,
-    })
-        .then(({ error }) => {
-        if (error)
-            console.error("[Usage Log Error]", error.message);
+    (0, db_js_1.query)(`INSERT INTO mcp_usage_logs (api_key_id, tool_name, args, success, error_message, duration_ms)
+     VALUES ($1, $2, $3, $4, $5, $6)`, [apiKeyId, toolName, JSON.stringify(args), success, errorMessage || null, durationMs || null]).catch((err) => {
+        console.error("[Usage Log Error]", err.message);
     });
 }
 /**
  * Get recent usage log entries.
  */
 async function getRecentUsage(limit = 100, filters) {
-    const db = (0, db_js_1.getSupabase)();
-    let query = db
-        .from("mcp_usage_logs")
-        .select("id, api_key_id, tool_name, args, success, error_message, duration_ms, created_at, api_key:mcp_api_keys(label, key_prefix)")
-        .order("created_at", { ascending: false })
-        .limit(limit);
+    const conditions = [];
+    const params = [];
+    let paramIndex = 1;
     if (filters?.key_id) {
-        query = query.eq("api_key_id", filters.key_id);
+        conditions.push(`l.api_key_id = $${paramIndex++}`);
+        params.push(filters.key_id);
     }
     if (filters?.tool_name) {
-        query = query.eq("tool_name", filters.tool_name);
+        conditions.push(`l.tool_name = $${paramIndex++}`);
+        params.push(filters.tool_name);
     }
     if (filters?.days) {
-        const since = new Date();
-        since.setDate(since.getDate() - filters.days);
-        query = query.gte("created_at", since.toISOString());
+        conditions.push(`l.created_at >= NOW() - INTERVAL '${filters.days} days'`);
     }
-    const { data, error } = await query;
-    if (error)
-        throw new Error(`Failed to get usage: ${error.message}`);
-    return data || [];
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const rows = await (0, db_js_1.query)(`SELECT l.id, l.api_key_id, l.tool_name, l.args, l.success, l.error_message,
+            l.duration_ms, l.created_at,
+            k.label AS api_key_label, k.key_prefix AS api_key_prefix
+     FROM mcp_usage_logs l
+     LEFT JOIN mcp_api_keys k ON k.id = l.api_key_id
+     ${whereClause}
+     ORDER BY l.created_at DESC
+     LIMIT $${paramIndex}`, [...params, limit]);
+    return rows.map((row) => ({
+        id: row.id,
+        api_key_id: row.api_key_id,
+        tool_name: row.tool_name,
+        args: row.args,
+        success: row.success,
+        error_message: row.error_message,
+        duration_ms: row.duration_ms,
+        created_at: row.created_at,
+        api_key: row.api_key_label
+            ? { label: row.api_key_label, key_prefix: row.api_key_prefix }
+            : null,
+    }));
 }
 /**
  * Get aggregate usage statistics.
  */
 async function getUsageStats(dateRange) {
-    const db = (0, db_js_1.getSupabase)();
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
     // Total calls
-    const { count: totalCalls } = await db
-        .from("mcp_usage_logs")
-        .select("*", { count: "exact", head: true });
+    const totalRow = await (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_usage_logs`);
+    const totalCalls = parseInt(totalRow?.count || "0", 10);
     // Calls today
-    const { count: callsToday } = await db
-        .from("mcp_usage_logs")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", todayStart);
+    const todayRow = await (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_usage_logs WHERE created_at >= CURRENT_DATE`);
+    const callsToday = parseInt(todayRow?.count || "0", 10);
     // Calls this week
-    const { count: callsThisWeek } = await db
-        .from("mcp_usage_logs")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", weekStart);
-    // Get recent logs for aggregation (last 30 days by default)
+    const weekRow = await (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_usage_logs WHERE created_at >= CURRENT_DATE - INTERVAL '7 days'`);
+    const callsThisWeek = parseInt(weekRow?.count || "0", 10);
+    // Date range for aggregations (default last 30 days)
+    const now = new Date();
     const rangeStart = dateRange?.from || new Date(now.getFullYear(), now.getMonth(), now.getDate() - 30).toISOString();
     const rangeEnd = dateRange?.to || now.toISOString();
-    const { data: recentLogs } = await db
-        .from("mcp_usage_logs")
-        .select("tool_name, created_at, api_key:mcp_api_keys(label)")
-        .gte("created_at", rangeStart)
-        .lte("created_at", rangeEnd)
-        .order("created_at", { ascending: false })
-        .limit(10000);
-    const logs = recentLogs || [];
-    // Aggregate top tools
-    const toolCounts = new Map();
-    const userCounts = new Map();
-    const dayCounts = new Map();
-    for (const log of logs) {
-        // Top tools
-        toolCounts.set(log.tool_name, (toolCounts.get(log.tool_name) || 0) + 1);
-        // Top users
-        const label = log.api_key?.label || "unknown";
-        userCounts.set(label, (userCounts.get(label) || 0) + 1);
-        // Calls per day
-        const day = log.created_at.substring(0, 10);
-        dayCounts.set(day, (dayCounts.get(day) || 0) + 1);
-    }
-    const topTools = [...toolCounts.entries()]
-        .map(([tool_name, count]) => ({ tool_name, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-    const topUsers = [...userCounts.entries()]
-        .map(([label, count]) => ({ label, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 10);
-    const callsPerDay = [...dayCounts.entries()]
-        .map(([date, count]) => ({ date, count }))
-        .sort((a, b) => a.date.localeCompare(b.date));
+    // Top tools
+    const topTools = await (0, db_js_1.query)(`SELECT tool_name, COUNT(*)::text AS count
+     FROM mcp_usage_logs
+     WHERE created_at >= $1 AND created_at <= $2
+     GROUP BY tool_name
+     ORDER BY COUNT(*) DESC
+     LIMIT 10`, [rangeStart, rangeEnd]);
+    // Top users
+    const topUsers = await (0, db_js_1.query)(`SELECT COALESCE(k.label, 'unknown') AS label, COUNT(*)::text AS count
+     FROM mcp_usage_logs l
+     LEFT JOIN mcp_api_keys k ON k.id = l.api_key_id
+     WHERE l.created_at >= $1 AND l.created_at <= $2
+     GROUP BY k.label
+     ORDER BY COUNT(*) DESC
+     LIMIT 10`, [rangeStart, rangeEnd]);
+    // Calls per day
+    const callsPerDay = await (0, db_js_1.query)(`SELECT created_at::date::text AS date, COUNT(*)::text AS count
+     FROM mcp_usage_logs
+     WHERE created_at >= $1 AND created_at <= $2
+     GROUP BY created_at::date
+     ORDER BY created_at::date`, [rangeStart, rangeEnd]);
     return {
-        total_calls: totalCalls || 0,
-        calls_today: callsToday || 0,
-        calls_this_week: callsThisWeek || 0,
-        top_tools: topTools,
-        top_users: topUsers,
-        calls_per_day: callsPerDay,
+        total_calls: totalCalls,
+        calls_today: callsToday,
+        calls_this_week: callsThisWeek,
+        top_tools: topTools.map((r) => ({ tool_name: r.tool_name, count: parseInt(r.count, 10) })),
+        top_users: topUsers.map((r) => ({ label: r.label, count: parseInt(r.count, 10) })),
+        calls_per_day: callsPerDay.map((r) => ({ date: r.date, count: parseInt(r.count, 10) })),
     };
 }

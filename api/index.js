@@ -17,6 +17,7 @@ const tripleseat_js_1 = require("./tripleseat.js");
 const middleware_js_1 = require("./middleware.js");
 const routes_js_1 = require("./admin/routes.js");
 const usage_js_1 = require("./usage.js");
+const api_keys_js_1 = require("./api-keys.js");
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -35,19 +36,91 @@ app.use((req, res, next) => {
 });
 // Health check
 app.get("/", (_req, res) => {
-    const status = !(0, auth_js_1.hasCredentials)()
-        ? "missing_credentials"
-        : !(0, auth_js_1.hasRefreshToken)()
-            ? "needs_oauth_setup"
-            : "ready";
-    res.json({
-        name: "tripleseat-mcp",
-        version: "2.0.0",
-        status,
-        transport: "streamable-http",
-        endpoint: "/mcp",
-        setup: status === "needs_oauth_setup" ? "/auth/login" : undefined,
-    });
+    try {
+        const status = !(0, auth_js_1.hasCredentials)()
+            ? "missing_credentials"
+            : !(0, auth_js_1.hasRefreshToken)()
+                ? "needs_oauth_setup"
+                : "ready";
+        res.json({
+            name: "tripleseat-mcp",
+            version: "2.1.0",
+            status,
+            transport: "streamable-http",
+            endpoint: "/mcp",
+            admin: "/admin/login",
+            oauth_token_url: "/oauth/token",
+            setup: status === "needs_oauth_setup" ? "/auth/login" : undefined,
+            env_check: {
+                has_db_url: !!process.env.DATABASE_URL,
+                has_admin_pw: !!process.env.ADMIN_PASSWORD,
+                has_client_id: !!process.env.TRIPLESEAT_CLIENT_ID,
+                has_refresh_token: !!process.env.TRIPLESEAT_REFRESH_TOKEN,
+            },
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message, stack: err.stack });
+    }
+});
+// ── OAuth Token Endpoint (for Claude connectors) ──
+// Claude's custom connector sends client_id + client_secret here,
+// and we return a Bearer token that maps to the key's role.
+app.post("/oauth/token", async (req, res) => {
+    try {
+        const grant_type = req.body.grant_type;
+        if (grant_type !== "client_credentials") {
+            console.log("[OAuth Token] Rejected grant_type:", grant_type, "| body keys:", Object.keys(req.body));
+            res.status(400).json({ error: "unsupported_grant_type", error_description: "Only client_credentials is supported" });
+            return;
+        }
+        // Extract credentials from body OR Basic auth header (RFC 6749 §2.3.1)
+        let client_id = req.body.client_id;
+        let client_secret = req.body.client_secret;
+        if ((!client_id || !client_secret) && req.headers.authorization?.startsWith("Basic ")) {
+            try {
+                const decoded = Buffer.from(req.headers.authorization.substring(6), "base64").toString("utf-8");
+                const colonIdx = decoded.indexOf(":");
+                if (colonIdx > 0) {
+                    client_id = decodeURIComponent(decoded.substring(0, colonIdx));
+                    client_secret = decodeURIComponent(decoded.substring(colonIdx + 1));
+                }
+            }
+            catch (e) {
+                console.log("[OAuth Token] Failed to parse Basic auth header");
+            }
+        }
+        if (!client_id || !client_secret) {
+            console.log("[OAuth Token] Missing credentials. Body has client_id:", !!req.body.client_id, "| Has Basic header:", !!req.headers.authorization?.startsWith("Basic "));
+            res.status(400).json({ error: "invalid_request", error_description: "client_id and client_secret are required" });
+            return;
+        }
+        console.log("[OAuth Token] Validating client_id:", client_id.substring(0, 12) + "...");
+        const result = await (0, api_keys_js_1.validateOAuthClient)(client_id, client_secret);
+        if (!result) {
+            console.log("[OAuth Token] Invalid credentials for client_id:", client_id.substring(0, 12) + "...");
+            res.status(401).json({ error: "invalid_client", error_description: "Invalid client credentials" });
+            return;
+        }
+        console.log("[OAuth Token] Authenticated key:", result.apiKey.id, "role:", result.role.name);
+        const accessToken = "oauth_" + result.apiKey.id + "_" + Date.now().toString(36);
+        // Store the OAuth token in the database for validation
+        const crypto = await import("node:crypto");
+        const tokenHash = crypto.createHash("sha256").update(accessToken).digest("hex");
+        const { query: dbQuery } = await import("./db.js");
+        await dbQuery(`INSERT INTO mcp_admin_sessions (id, expires_at)
+       VALUES ($1, NOW() + INTERVAL '24 hours')`, ["oauth:" + tokenHash + ":" + result.apiKey.id]);
+        res.json({
+            access_token: accessToken,
+            token_type: "Bearer",
+            expires_in: 86400, // 24 hours
+            scope: result.role.allowed_tools.join(" "),
+        });
+    }
+    catch (err) {
+        console.error("[OAuth Token Error]", err.message);
+        res.status(500).json({ error: "server_error", error_description: err.message });
+    }
 });
 // ── Admin Dashboard ──
 app.use("/admin", routes_js_1.adminRouter);
@@ -78,7 +151,15 @@ app.get("/auth/callback", async (req, res) => {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const redirectUri = protocol + "://" + host + "/auth/callback";
         const tokens = await (0, auth_js_1.exchangeCodeForTokens)(code, redirectUri);
-        // Show the refresh token for the user to copy into Vercel env vars
+        // Store tokens in the database for immediate use
+        try {
+            await (0, auth_js_1.storeTokens)(tokens);
+            console.log("[Auth Callback] Tokens stored in database successfully");
+        }
+        catch (storeErr) {
+            console.error("[Auth Callback] Failed to store tokens in DB:", storeErr.message);
+        }
+        // Show the token info
         res.send(`<!DOCTYPE html>
 <html><head><title>TripleSeat MCP - OAuth Setup Complete</title>
 <style>
@@ -313,10 +394,11 @@ async function executeTool(name, args) {
                 params.query = args.query;
             if (args.status)
                 params.status = args.status;
+            // TripleSeat uses event_start_date/event_end_date (not from_date/to_date)
             if (args.from_date)
-                params.from_date = args.from_date;
+                params.event_start_date = args.from_date;
             if (args.to_date)
-                params.to_date = args.to_date;
+                params.event_end_date = args.to_date;
             if (args.location_id)
                 params.location_id = args.location_id;
             if (args.page)
@@ -331,8 +413,9 @@ async function executeTool(name, args) {
             return JSON.stringify(data, null, 2);
         }
         case "list_upcoming_events": {
-            params.from_date = args.from_date;
-            params.to_date = args.to_date;
+            // TripleSeat uses event_start_date/event_end_date (not from_date/to_date)
+            params.event_start_date = args.from_date;
+            params.event_end_date = args.to_date;
             params.order = "event_start";
             params.sort_direction = "asc";
             if (args.location_id)
@@ -343,8 +426,9 @@ async function executeTool(name, args) {
             return JSON.stringify(data, null, 2);
         }
         case "check_availability": {
-            params.from_date = args.date;
-            params.to_date = args.date;
+            // TripleSeat uses event_start_date/event_end_date (not from_date/to_date)
+            params.event_start_date = args.date;
+            params.event_end_date = args.date;
             params.order = "event_start";
             params.sort_direction = "asc";
             if (args.location_id)
@@ -373,6 +457,9 @@ async function executeTool(name, args) {
                 params.to_date = args.to_date;
             if (args.page)
                 params.page = String(args.page);
+            // Default to newest first
+            params.order = "created_at";
+            params.sort_direction = "desc";
             const { data } = await (0, tripleseat_js_1.tripleseatGet)("/leads/search", params);
             return JSON.stringify(data, null, 2);
         }
@@ -381,7 +468,10 @@ async function executeTool(name, args) {
                 params.page = String(args.page);
             if (args.location_id)
                 params.location_id = args.location_id;
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/leads", params);
+            // Sort newest first so "recent" leads are actually recent
+            params.order = "created_at";
+            params.sort_direction = "desc";
+            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/leads/search", params);
             return JSON.stringify(data, null, 2);
         }
         case "get_booking": {
@@ -393,16 +483,16 @@ async function executeTool(name, args) {
         case "search_bookings": {
             if (args.query)
                 params.query = args.query;
+            // TripleSeat bookings use booking_start_date/booking_end_date
             if (args.from_date)
-                params.from_date = args.from_date;
+                params.booking_start_date = args.from_date;
             if (args.to_date)
-                params.to_date = args.to_date;
+                params.booking_end_date = args.to_date;
             if (args.page)
                 params.page = String(args.page);
-            if (args.order)
-                params.order = args.order;
-            if (args.sort_direction)
-                params.sort_direction = args.sort_direction;
+            // Default to newest first
+            params.order = args.order || "created_at";
+            params.sort_direction = args.sort_direction || "desc";
             if (args.include_financials)
                 params.show_financial = "true";
             const { data } = await (0, tripleseat_js_1.tripleseatGet)("/bookings/search", params);
@@ -507,6 +597,11 @@ async function handleMessage(msg, req) {
                 if (!req.role.allowed_tools.includes(toolName)) {
                     return jsonrpcError(id, -32001, `Tool "${toolName}" is not allowed for your role "${req.role.name}"`);
                 }
+            }
+            // Enforce no-financials for roles that don't have booking tools (i.e., coordinator)
+            // If a role doesn't include get_booking, they shouldn't see financial data anywhere.
+            if (req.hasApiKey && req.role?.allowed_tools && !req.role.allowed_tools.includes("get_booking")) {
+                toolArgs.include_financials = false;
             }
             const startTime = Date.now();
             try {

@@ -19,6 +19,9 @@ router.get("/login", (_req, res) => {
 router.post("/login", async (req, res) => {
     const { password } = req.body;
     const adminPassword = process.env.ADMIN_PASSWORD;
+    console.log("[admin/login] body keys:", Object.keys(req.body || {}));
+    console.log("[admin/login] password received:", typeof password, password ? `"${password.substring(0, 4)}..." (len=${password.length})` : "EMPTY");
+    console.log("[admin/login] ADMIN_PASSWORD env:", typeof adminPassword, adminPassword ? `"${adminPassword.substring(0, 4)}..." (len=${adminPassword.length})` : "NOT SET");
     if (!adminPassword) {
         res.type("html").send((0, views_js_1.loginPage)("ADMIN_PASSWORD environment variable not set."));
         return;

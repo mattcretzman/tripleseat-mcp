@@ -710,27 +710,52 @@ function dashboardPage(data) {
       </div>
 
       <div class="inline-form" id="create-key-form">
-        <div class="form-row">
-          <div class="form-group">
-            <label>Label</label>
-            <input type="text" id="new-key-label" placeholder="e.g. Claude Desktop">
-          </div>
-          <div class="form-group">
-            <label>Role</label>
-            <select id="new-key-role">${roleOptions}</select>
-          </div>
-          <div style="display:flex;gap:8px;padding-bottom:1px">
-            <button class="btn btn-primary btn-sm" onclick="createKey()">Create</button>
-            <button class="btn btn-secondary btn-sm" onclick="toggleForm('create-key-form')">Cancel</button>
+        <div id="create-key-inputs">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Label</label>
+              <input type="text" id="new-key-label" placeholder="e.g. Brian - Admin">
+            </div>
+            <div class="form-group">
+              <label>Role</label>
+              <select id="new-key-role">${roleOptions}</select>
+            </div>
+            <div style="display:flex;gap:8px;padding-bottom:1px">
+              <button class="btn btn-primary btn-sm" id="create-key-btn" onclick="createKey()">Create</button>
+              <button class="btn btn-secondary btn-sm" onclick="closeCreateKey()">Cancel</button>
+            </div>
           </div>
         </div>
         <div class="key-reveal" id="new-key-reveal">
-          <div style="font-size:13px;font-weight:500;margin-bottom:4px">Your new API key:</div>
+          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px">
+            <span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">Server URL</span>
+            <span style="font-family:var(--mono);font-size:13px;color:var(--text)">https://tripleseat-mcp.vercel.app/mcp</span>
+          </div>
+
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px">For Claude Desktop (Bearer token):</div>
           <div class="key-text">
             <span id="new-key-value"></span>
             <button class="btn btn-secondary btn-sm" onclick="copyKey()">Copy</button>
           </div>
-          <div class="key-warning">This key will only be shown once. Copy it now.</div>
+
+          <div style="border-top:1px solid var(--border);margin:16px 0"></div>
+
+          <div style="font-size:13px;font-weight:500;margin-bottom:8px">For Claude.ai Connector (OAuth):</div>
+          <div style="display:grid;gap:8px">
+            <div class="key-text" style="flex-direction:column;align-items:flex-start;gap:4px">
+              <span style="font-size:11px;color:var(--text-secondary)">Client ID</span>
+              <span id="new-key-client-id" style="word-break:break-all"></span>
+            </div>
+            <div class="key-text" style="flex-direction:column;align-items:flex-start;gap:4px">
+              <span style="font-size:11px;color:var(--text-secondary)">Client Secret</span>
+              <span id="new-key-client-secret" style="word-break:break-all"></span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="copyOAuth()" style="width:fit-content">Copy Both</button>
+          </div>
+          <div class="key-warning" style="margin-top:12px">Secrets are only shown once. The Server URL and Client ID can be viewed later from the keys table.</div>
+          <div style="margin-top:16px;display:flex;justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="closeCreateKey()">Done</button>
+          </div>
         </div>
       </div>
 
@@ -947,9 +972,10 @@ function dashboardPage(data) {
           '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
           '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(k.last_used_at) + '</td>' +
           '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(k.created_at) + '</td>' +
-          '<td>' +
+          '<td style="display:flex;gap:6px">' +
             (k.is_active
-              ? '<button class="btn btn-danger btn-sm" onclick="revokeKey(\\'' + k.id + '\\', \\'' + esc(k.label) + '\\')">Revoke</button>'
+              ? '<button class="btn btn-secondary btn-sm" onclick="showKeyInfo(\\'' + k.id + '\\')">Info</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="revokeKey(\\'' + k.id + '\\', \\'' + esc(k.label) + '\\')">Revoke</button>'
               : '<span style="color:var(--text-tertiary);font-size:12px">Revoked</span>') +
           '</td>' +
         '</tr>';
@@ -966,6 +992,10 @@ function dashboardPage(data) {
       const roleId = document.getElementById('new-key-role').value;
       if (!label) { toast('Label is required', 'error'); return; }
 
+      const btn = document.getElementById('create-key-btn');
+      btn.disabled = true;
+      btn.textContent = 'Creating...';
+
       try {
         const result = await api('/admin/api/keys', {
           method: 'POST',
@@ -973,21 +1003,83 @@ function dashboardPage(data) {
         });
 
         document.getElementById('new-key-value').textContent = result.key;
+        document.getElementById('new-key-client-id').textContent = result.client_id || '';
+        document.getElementById('new-key-client-secret').textContent = result.client_secret || '';
+
+        // Hide the input form, show the credentials
+        document.getElementById('create-key-inputs').style.display = 'none';
         document.getElementById('new-key-reveal').classList.add('visible');
-        document.getElementById('new-key-label').value = '';
 
         // Refresh keys
         keysData = await api('/admin/api/keys');
         renderKeys();
-        toast('API key created');
+        // Update role select for next key creation
+        const roleSelect = document.getElementById('new-key-role');
+        roleSelect.innerHTML = rolesData.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+        toast('Key created for ' + label);
       } catch (e) {
         toast('Failed to create key: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Create';
       }
+    }
+
+    function closeCreateKey() {
+      // Reset everything
+      document.getElementById('create-key-form').classList.remove('visible');
+      document.getElementById('create-key-inputs').style.display = '';
+      document.getElementById('new-key-reveal').classList.remove('visible');
+      document.getElementById('new-key-label').value = '';
+      const btn = document.getElementById('create-key-btn');
+      btn.disabled = false;
+      btn.textContent = 'Create';
     }
 
     function copyKey() {
       const key = document.getElementById('new-key-value').textContent;
       navigator.clipboard.writeText(key).then(() => toast('Copied to clipboard'));
+    }
+
+    function copyOAuth() {
+      const clientId = document.getElementById('new-key-client-id').textContent;
+      const clientSecret = document.getElementById('new-key-client-secret').textContent;
+      navigator.clipboard.writeText('Client ID: ' + clientId + '\\nClient Secret: ' + clientSecret)
+        .then(() => toast('OAuth credentials copied'));
+    }
+
+    function showKeyInfo(keyId) {
+      const k = keysData.find(x => x.id === keyId);
+      if (!k) return;
+
+      const html = '<div class="confirm-overlay" id="key-info-overlay">' +
+        '<div class="confirm-box" style="max-width:550px">' +
+        '<h3>Connection Info: ' + esc(k.label) + '</h3>' +
+        '<p style="margin-bottom:16px">Share these details with the user. Secrets are not stored and cannot be retrieved.</p>' +
+        '<div style="display:grid;gap:10px">' +
+          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
+            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">Server URL</span>' +
+            '<span style="font-family:var(--mono);font-size:12px">https://tripleseat-mcp.vercel.app/mcp</span>' +
+          '</div>' +
+          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
+            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">Key Prefix</span>' +
+            '<span style="font-family:var(--mono);font-size:12px">' + esc(k.key_prefix) + '...</span>' +
+          '</div>' +
+          (k.client_id ? '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
+            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">OAuth Client ID</span>' +
+            '<span style="font-family:var(--mono);font-size:12px">' + esc(k.client_id) + '</span>' +
+          '</div>' : '') +
+          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
+            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">Role</span>' +
+            '<span style="font-size:12px">' + esc(k.role ? k.role.name : 'unknown') + '</span>' +
+          '</div>' +
+          '<p style="font-size:12px;color:var(--warning);margin-top:4px">Bearer token and Client Secret were shown once at creation and cannot be retrieved. Create a new key if needed.</p>' +
+        '</div>' +
+        '<div class="confirm-actions" style="margin-top:16px">' +
+          (k.client_id ? '<button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(\\'' + esc(k.client_id) + '\\').then(()=>toast(\\'Client ID copied\\'))">Copy Client ID</button>' : '') +
+          '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\\'key-info-overlay\\').remove()">Close</button>' +
+        '</div></div></div>';
+
+      document.body.insertAdjacentHTML('beforeend', html);
     }
 
     async function changeKeyRole(keyId, newRoleId) {

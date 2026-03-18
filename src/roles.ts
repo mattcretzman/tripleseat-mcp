@@ -2,7 +2,7 @@
  * Role management — CRUD and seeding default roles.
  */
 
-import { getSupabase } from "./db.js";
+import { query, queryOne } from "./db.js";
 
 export interface Role {
   id: string;
@@ -39,31 +39,14 @@ export { ALL_TOOLS };
  * List all roles.
  */
 export async function listRoles(): Promise<Role[]> {
-  const db = getSupabase();
-
-  const { data, error } = await db
-    .from("mcp_roles")
-    .select("*")
-    .order("name", { ascending: true });
-
-  if (error) throw new Error(`Failed to list roles: ${error.message}`);
-  return (data || []) as Role[];
+  return query<Role>(`SELECT * FROM mcp_roles ORDER BY created_at`);
 }
 
 /**
  * Get a single role by ID.
  */
 export async function getRole(id: string): Promise<Role | null> {
-  const db = getSupabase();
-
-  const { data, error } = await db
-    .from("mcp_roles")
-    .select("*")
-    .eq("id", id)
-    .single();
-
-  if (error) return null;
-  return data as Role;
+  return queryOne<Role>(`SELECT * FROM mcp_roles WHERE id = $1`, [id]);
 }
 
 /**
@@ -74,16 +57,15 @@ export async function createRole(
   description: string,
   allowedTools: string[]
 ): Promise<Role> {
-  const db = getSupabase();
+  const row = await queryOne<Role>(
+    `INSERT INTO mcp_roles (name, description, allowed_tools)
+     VALUES ($1, $2, $3::text[])
+     RETURNING *`,
+    [name, description, allowedTools]
+  );
 
-  const { data, error } = await db
-    .from("mcp_roles")
-    .insert({ name, description, allowed_tools: allowedTools })
-    .select("*")
-    .single();
-
-  if (error) throw new Error(`Failed to create role: ${error.message}`);
-  return data as Role;
+  if (!row) throw new Error("Failed to create role");
+  return row;
 }
 
 /**
@@ -93,35 +75,39 @@ export async function updateRole(
   id: string,
   updates: Partial<Pick<Role, "name" | "description" | "allowed_tools">>
 ): Promise<Role> {
-  const db = getSupabase();
+  const setClauses: string[] = [];
+  const params: any[] = [];
+  let paramIndex = 1;
 
-  const { data, error } = await db
-    .from("mcp_roles")
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq("id", id)
-    .select("*")
-    .single();
+  if (updates.name !== undefined) {
+    setClauses.push(`name = $${paramIndex++}`);
+    params.push(updates.name);
+  }
+  if (updates.description !== undefined) {
+    setClauses.push(`description = $${paramIndex++}`);
+    params.push(updates.description);
+  }
+  if (updates.allowed_tools !== undefined) {
+    setClauses.push(`allowed_tools = $${paramIndex++}::text[]`);
+    params.push(updates.allowed_tools);
+  }
 
-  if (error) throw new Error(`Failed to update role: ${error.message}`);
-  return data as Role;
+  setClauses.push(`updated_at = NOW()`);
+  params.push(id);
+
+  const row = await queryOne<Role>(
+    `UPDATE mcp_roles SET ${setClauses.join(", ")} WHERE id = $${paramIndex} RETURNING *`,
+    params
+  );
+
+  if (!row) throw new Error("Failed to update role");
+  return row;
 }
 
 /**
- * Seed default roles if none exist.
+ * Seed default roles (uses ON CONFLICT to skip existing).
  */
-export async function seedDefaultRoles(): Promise<{ created: string[]; skipped: boolean }> {
-  const db = getSupabase();
-
-  const { count, error: countError } = await db
-    .from("mcp_roles")
-    .select("*", { count: "exact", head: true });
-
-  if (countError) throw new Error(`Failed to check roles: ${countError.message}`);
-
-  if (count && count > 0) {
-    return { created: [], skipped: true };
-  }
-
+export async function seedDefaultRoles(): Promise<{ created: string[]; updated: string[]; skipped: boolean }> {
   const defaults = [
     {
       name: "admin",
@@ -135,7 +121,7 @@ export async function seedDefaultRoles(): Promise<{ created: string[]; skipped: 
     },
     {
       name: "coordinator",
-      description: "Events, leads, availability, and bookings",
+      description: "Events, leads, contacts, locations, and availability — no financials",
       allowed_tools: [
         "get_event",
         "search_events",
@@ -144,19 +130,52 @@ export async function seedDefaultRoles(): Promise<{ created: string[]; skipped: 
         "get_lead",
         "search_leads",
         "list_recent_leads",
-        "get_booking",
-        "search_bookings",
+        "get_contact",
+        "search_contacts",
+        "get_account",
+        "search_accounts",
+        "list_sites",
+        "list_locations",
+        "get_location",
       ],
     },
     {
       name: "viewer",
       description: "Read-only access to individual records",
-      allowed_tools: ALL_TOOLS.filter((t) => t.startsWith("get_")),
+      allowed_tools: [
+        "get_event",
+        "get_lead",
+        "get_booking",
+        "get_contact",
+        "get_account",
+        "get_location",
+      ],
     },
   ];
 
-  const { error } = await db.from("mcp_roles").insert(defaults);
-  if (error) throw new Error(`Failed to seed roles: ${error.message}`);
+  const created: string[] = [];
+  const updated: string[] = [];
 
-  return { created: defaults.map((d) => d.name), skipped: false };
+  for (const role of defaults) {
+    const row = await queryOne<{ name: string; xmax: string }>(
+      `INSERT INTO mcp_roles (name, description, allowed_tools)
+       VALUES ($1, $2, $3::text[])
+       ON CONFLICT (name) DO UPDATE
+         SET description = EXCLUDED.description,
+             allowed_tools = EXCLUDED.allowed_tools,
+             updated_at = NOW()
+       RETURNING name, xmax::text`,
+      [role.name, role.description, role.allowed_tools]
+    );
+    if (row) {
+      // xmax = '0' means INSERT, otherwise UPDATE
+      if (row.xmax === "0") {
+        created.push(row.name);
+      } else {
+        updated.push(row.name);
+      }
+    }
+  }
+
+  return { created, updated, skipped: created.length === 0 && updated.length === 0 };
 }
