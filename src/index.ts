@@ -238,7 +238,7 @@ const TOOLS = [
   },
   {
     name: "search_events",
-    description: "Search TripleSeat events by name, date range, status, or venue. Useful for finding specific weddings or checking what's happening in a time period.",
+    description: "Search TripleSeat events by name, date range, status, or venue. Returns summary fields only (id, name, status, dates, location, guest count). Use get_event with the event ID for full details.",
     inputSchema: {
       type: "object",
       properties: {
@@ -256,7 +256,7 @@ const TOOLS = [
   },
   {
     name: "list_upcoming_events",
-    description: "List all events in a date range. Great for 'what's coming up this week/month' and staffing planning.",
+    description: "List events in a date range. Returns summary fields only (id, name, status, dates, location, guest count). Use get_event for full details on any event.",
     inputSchema: {
       type: "object",
       properties: {
@@ -291,7 +291,7 @@ const TOOLS = [
   },
   {
     name: "search_leads",
-    description: "Search leads by name, email, date, status, or location. For finding inquiries and checking the lead pipeline.",
+    description: "Search leads by name, email, date, status, or location. Returns summary fields only. Use get_lead for full details.",
     inputSchema: {
       type: "object",
       properties: {
@@ -306,7 +306,7 @@ const TOOLS = [
   },
   {
     name: "list_recent_leads",
-    description: "Get the most recent leads. Good for checking latest inquiries and making sure nothing's fallen through the cracks.",
+    description: "Get the most recent leads (summary fields). Use get_lead for full details on any lead.",
     inputSchema: {
       type: "object",
       properties: {
@@ -329,7 +329,7 @@ const TOOLS = [
   },
   {
     name: "search_bookings",
-    description: "Search bookings by date range or status. Use for revenue reporting and payment tracking.",
+    description: "Search bookings by date range or status. Returns summary fields only. Use get_booking for full details.",
     inputSchema: {
       type: "object",
       properties: {
@@ -354,7 +354,7 @@ const TOOLS = [
   },
   {
     name: "search_contacts",
-    description: "Search contacts by name, email, or phone.",
+    description: "Search contacts by name, email, or phone. Returns summary fields only. Use get_contact for full details.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string" }, page: { type: "number", default: 1 } },
@@ -372,7 +372,7 @@ const TOOLS = [
   },
   {
     name: "search_accounts",
-    description: "Search accounts by name or email.",
+    description: "Search accounts by name or email. Returns summary fields only. Use get_account for full details.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string" }, page: { type: "number", default: 1 } },
@@ -405,6 +405,44 @@ const TOOLS = [
   }
 ];
 
+// ── Response Size Management ──
+const MAX_RESPONSE_CHARS = 12000; // ~3k tokens — keeps responses well within context budget
+
+// Fields to keep in list/search results (everything else stripped)
+const EVENT_SUMMARY_FIELDS = ["id", "name", "status", "event_start", "event_end", "location", "location_id", "room", "guest_count", "created_at"];
+const LEAD_SUMMARY_FIELDS = ["id", "first_name", "last_name", "email", "phone", "status", "location", "location_id", "event_date", "guest_count", "created_at", "lead_source"];
+const BOOKING_SUMMARY_FIELDS = ["id", "event_id", "status", "total", "balance_due", "created_at", "location", "location_id"];
+const CONTACT_SUMMARY_FIELDS = ["id", "first_name", "last_name", "email", "phone", "company", "account_id"];
+const ACCOUNT_SUMMARY_FIELDS = ["id", "name", "email", "phone", "address"];
+
+function summarizeItem(item: any, fields: string[]): any {
+  if (!item || typeof item !== "object") return item;
+  const summary: any = {};
+  for (const f of fields) {
+    if (item[f] !== undefined) summary[f] = item[f];
+  }
+  return summary;
+}
+
+function summarizeList(data: any, fields: string[]): { items: any[]; total?: number; page?: number; truncatedFields: boolean } {
+  const items = Array.isArray(data) ? data : (data as any)?.results || (data as any)?.data || [];
+  const summarized = items.map((item: any) => summarizeItem(item, fields));
+  return {
+    items: summarized,
+    total: (data as any)?.total_count ?? items.length,
+    page: (data as any)?.page,
+    truncatedFields: true,
+  };
+}
+
+function truncateResponse(text: string, toolName: string): string {
+  if (text.length <= MAX_RESPONSE_CHARS) return text;
+  const hint = toolName.startsWith("search_") || toolName.startsWith("list_")
+    ? `\n\n[Response truncated at ${MAX_RESPONSE_CHARS} chars. Use get_event, get_lead, get_booking, or get_contact for full details on specific items.]`
+    : `\n\n[Response truncated at ${MAX_RESPONSE_CHARS} chars.]`;
+  return text.substring(0, MAX_RESPONSE_CHARS) + hint;
+}
+
 // ── Tool Execution ──
 async function executeTool(name: string, args: any): Promise<string> {
   const params: Record<string, string> = {};
@@ -418,7 +456,6 @@ async function executeTool(name: string, args: any): Promise<string> {
     case "search_events": {
       if (args.query) params.query = args.query;
       if (args.status) params.status = args.status;
-      // TripleSeat uses event_start_date/event_end_date (not from_date/to_date)
       if (args.from_date) params.event_start_date = args.from_date;
       if (args.to_date) params.event_end_date = args.to_date;
       if (args.location_id) params.location_id = args.location_id;
@@ -427,10 +464,10 @@ async function executeTool(name: string, args: any): Promise<string> {
       if (args.sort_direction) params.sort_direction = args.sort_direction;
       if (args.include_financials) params.show_financial = "true";
       const { data } = await tripleseatGet("/events/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, EVENT_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "list_upcoming_events": {
-      // TripleSeat uses event_start_date/event_end_date (not from_date/to_date)
       params.event_start_date = args.from_date;
       params.event_end_date = args.to_date;
       params.order = "event_start";
@@ -438,10 +475,10 @@ async function executeTool(name: string, args: any): Promise<string> {
       if (args.location_id) params.location_id = args.location_id;
       if (args.include_financials) params.show_financial = "true";
       const { data } = await tripleseatGet("/events/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, EVENT_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "check_availability": {
-      // TripleSeat uses event_start_date/event_end_date (not from_date/to_date)
       params.event_start_date = args.date;
       params.event_end_date = args.date;
       params.order = "event_start";
@@ -452,7 +489,8 @@ async function executeTool(name: string, args: any): Promise<string> {
       const summary = events.length === 0
         ? `No events found on ${args.date}. The date appears to be available.`
         : `Found ${events.length} event(s) on ${args.date}.`;
-      return summary + "\n" + JSON.stringify(data, null, 2);
+      const summarized = summarizeList(data, EVENT_SUMMARY_FIELDS);
+      return truncateResponse(summary + "\n" + JSON.stringify(summarized), name);
     }
     case "get_lead": {
       const { data } = await tripleseatGet(`/leads/${args.lead_id}`);
@@ -465,20 +503,20 @@ async function executeTool(name: string, args: any): Promise<string> {
       if (args.from_date) params.from_date = args.from_date;
       if (args.to_date) params.to_date = args.to_date;
       if (args.page) params.page = String(args.page);
-      // Default to newest first
       params.order = "created_at";
       params.sort_direction = "desc";
       const { data } = await tripleseatGet("/leads/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, LEAD_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "list_recent_leads": {
       if (args.page) params.page = String(args.page);
       if (args.location_id) params.location_id = args.location_id;
-      // Sort newest first so "recent" leads are actually recent
       params.order = "created_at";
       params.sort_direction = "desc";
       const { data } = await tripleseatGet("/leads/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, LEAD_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "get_booking": {
       if (args.include_financials !== false) params.show_financial = "true";
@@ -487,16 +525,15 @@ async function executeTool(name: string, args: any): Promise<string> {
     }
     case "search_bookings": {
       if (args.query) params.query = args.query;
-      // TripleSeat bookings use booking_start_date/booking_end_date
       if (args.from_date) params.booking_start_date = args.from_date;
       if (args.to_date) params.booking_end_date = args.to_date;
       if (args.page) params.page = String(args.page);
-      // Default to newest first
       params.order = args.order || "created_at";
       params.sort_direction = args.sort_direction || "desc";
       if (args.include_financials) params.show_financial = "true";
       const { data } = await tripleseatGet("/bookings/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, BOOKING_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "get_contact": {
       const { data } = await tripleseatGet(`/contacts/${args.contact_id}`);
@@ -506,7 +543,8 @@ async function executeTool(name: string, args: any): Promise<string> {
       params.query = args.query;
       if (args.page) params.page = String(args.page);
       const { data } = await tripleseatGet("/contacts/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, CONTACT_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "get_account": {
       const { data } = await tripleseatGet(`/accounts/${args.account_id}`);
@@ -516,7 +554,8 @@ async function executeTool(name: string, args: any): Promise<string> {
       params.query = args.query;
       if (args.page) params.page = String(args.page);
       const { data } = await tripleseatGet("/accounts/search", params);
-      return JSON.stringify(data, null, 2);
+      const result = summarizeList(data, ACCOUNT_SUMMARY_FIELDS);
+      return truncateResponse(JSON.stringify(result), name);
     }
     case "list_sites": {
       const { data } = await tripleseatGet("/sites");
@@ -553,6 +592,12 @@ Key context for this installation:
 - Events always have at least: a booking, account, contact, location, and room
 - Financial data is available on events and bookings when requested
 - Use location IDs to filter results by venue when the user asks about a specific property
+
+IMPORTANT — Response size management:
+- Search and list tools return SUMMARY fields only (id, name, dates, status, location) to conserve context window
+- To get full details (BEOs, packages, vendors, financials), use the get_event, get_lead, get_booking, or get_contact tools with the specific ID
+- Always use the search/list → then get_detail pattern: find items first, then drill into the ones the user cares about
+- Do NOT call get_event/get_lead/get_booking for every item in a list — only fetch full details when the user asks about a specific item
 
 When answering questions:
 - Be specific with dates, names, and numbers pulled from the data
