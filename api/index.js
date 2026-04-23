@@ -13,15 +13,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const auth_js_1 = require("./auth.js");
-const tripleseat_js_1 = require("./tripleseat.js");
 const middleware_js_1 = require("./middleware.js");
 const routes_js_1 = require("./admin/routes.js");
-const usage_js_1 = require("./usage.js");
 const db_js_1 = require("./db.js");
 const roles_js_1 = require("./roles.js");
 const users_js_1 = require("./users.js");
 const users_js_2 = require("./users.js");
 const oauth_js_1 = require("./oauth.js");
+const mcp_js_1 = require("./mcp.js");
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
@@ -37,7 +36,6 @@ async function ensureMigrated() {
         const { created } = await (0, roles_js_1.seedDefaultRoles)();
         if (created.length > 0)
             console.log("[Init] Seeded roles:", created.join(", "));
-        // Seed admin user from env vars if no admin exists yet
         const { query: dbQuery } = await import("./db.js");
         const adminRole = await dbQuery(`SELECT id FROM mcp_roles WHERE name = 'admin' LIMIT 1`);
         if (adminRole.length > 0) {
@@ -92,14 +90,12 @@ app.get("/", (_req, res) => {
     }
 });
 // ── OAuth 2.1 Endpoints (MCP protocol auth) ──
-// Discovery metadata
 app.get("/.well-known/oauth-authorization-server", (req, res) => {
     const protocol = req.headers["x-forwarded-proto"] || "https";
     const host = req.headers.host || "tripleseat-mcp.vercel.app";
     const issuer = protocol + "://" + host;
     res.json((0, oauth_js_1.getMetadata)(issuer));
 });
-// Dynamic client registration (RFC 7591)
 app.post("/oauth/register", async (req, res) => {
     try {
         const { client_name, redirect_uris } = req.body;
@@ -116,7 +112,6 @@ app.post("/oauth/register", async (req, res) => {
         res.status(500).json({ error: "server_error", error_description: err.message });
     }
 });
-// Authorization endpoint — GET shows login page
 app.get("/oauth/authorize", (req, res) => {
     const { client_id, redirect_uri, code_challenge, code_challenge_method, state, response_type, } = req.query;
     if (response_type !== "code") {
@@ -138,7 +133,6 @@ app.get("/oauth/authorize", (req, res) => {
         state,
     }));
 });
-// Authorization endpoint — POST processes login
 app.post("/oauth/authorize", async (req, res) => {
     const { client_id, redirect_uri, code_challenge, code_challenge_method, state, email, password } = req.body;
     if (!client_id || !redirect_uri || !code_challenge || !state || !email || !password) {
@@ -183,7 +177,6 @@ app.post("/oauth/authorize", async (req, res) => {
         }));
     }
 });
-// Token endpoint — exchange code or refresh
 app.post("/oauth/token", async (req, res) => {
     try {
         const { grant_type } = req.body;
@@ -413,794 +406,12 @@ app.get("/auth/callback", async (req, res) => {
         res.status(500).send("<h1>Token Exchange Failed</h1><pre>" + err.message + "</pre>");
     }
 });
-// ── Tool Definitions ──
-const TOOLS = [
-    {
-        name: "get_event",
-        description: "Get full event details from TripleSeat by event ID. Returns BEO data, packages, vendors, status, and optionally financial details.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                event_id: { type: "string", description: "The TripleSeat event ID" },
-                include_financials: { type: "boolean", description: "Include financial details", default: false }
-            },
-            required: ["event_id"]
-        }
-    },
-    {
-        name: "search_events",
-        description: "Search TripleSeat events by name, date range, status, or venue. Returns summary fields only (id, name, status, dates, location, guest count). Use get_event with the event ID for full details.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                query: { type: "string", description: "Search term (event name, client name)" },
-                status: { type: "string", enum: ["DEFINITE", "TENTATIVE", "PROSPECT", "CLOSED", "LOST"], description: "Filter by status" },
-                from_date: { type: "string", description: "Start date (MM/DD/YYYY)" },
-                to_date: { type: "string", description: "End date (MM/DD/YYYY)" },
-                location_id: { type: "string", description: "Filter by venue location ID" },
-                page: { type: "number", description: "Page number", default: 1 },
-                order: { type: "string", description: "Sort field", default: "event_start" },
-                sort_direction: { type: "string", enum: ["asc", "desc"], default: "desc" },
-                include_financials: { type: "boolean", default: false }
-            }
-        }
-    },
-    {
-        name: "list_upcoming_events",
-        description: "List events in a date range. Returns summary fields only (id, name, status, dates, location, guest count). Use get_event for full details on any event.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                from_date: { type: "string", description: "Start date (MM/DD/YYYY)" },
-                to_date: { type: "string", description: "End date (MM/DD/YYYY)" },
-                location_id: { type: "string", description: "Filter to specific venue" },
-                include_financials: { type: "boolean", default: false }
-            },
-            required: ["from_date", "to_date"]
-        }
-    },
-    {
-        name: "check_availability",
-        description: "Check if a specific date is available at a venue by looking for existing events on that date.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                date: { type: "string", description: "Date to check (MM/DD/YYYY)" },
-                location_id: { type: "string", description: "Specific venue to check" }
-            },
-            required: ["date"]
-        }
-    },
-    {
-        name: "get_lead",
-        description: "Get full lead details — contact info, budget, date preferences, lead source, qualification data.",
-        inputSchema: {
-            type: "object",
-            properties: { lead_id: { type: "string", description: "The TripleSeat lead ID" } },
-            required: ["lead_id"]
-        }
-    },
-    {
-        name: "search_leads",
-        description: "Search leads by name, email, date, status, or location. Returns summary fields only. Use get_lead for full details.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                query: { type: "string", description: "Search term — name, email, phone" },
-                status: { type: "string", description: "Lead status filter" },
-                location_id: { type: "string", description: "Filter by venue" },
-                from_date: { type: "string", description: "Created after (MM/DD/YYYY)" },
-                to_date: { type: "string", description: "Created before (MM/DD/YYYY)" },
-                page: { type: "number", default: 1 }
-            }
-        }
-    },
-    {
-        name: "list_recent_leads",
-        description: "Get the most recent leads (summary fields). Use get_lead for full details on any lead.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                page: { type: "number", default: 1 },
-                location_id: { type: "string", description: "Filter by venue" }
-            }
-        }
-    },
-    {
-        name: "get_booking",
-        description: "Get booking details including financial data — payment status, balance due, package totals.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                booking_id: { type: "string", description: "The TripleSeat booking ID" },
-                include_financials: { type: "boolean", default: true }
-            },
-            required: ["booking_id"]
-        }
-    },
-    {
-        name: "search_bookings",
-        description: "Search bookings by date range or status. Returns summary fields only. Use get_booking for full details.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                query: { type: "string" },
-                from_date: { type: "string", description: "MM/DD/YYYY" },
-                to_date: { type: "string", description: "MM/DD/YYYY" },
-                page: { type: "number", default: 1 },
-                order: { type: "string", default: "created_at" },
-                sort_direction: { type: "string", enum: ["asc", "desc"], default: "desc" },
-                include_financials: { type: "boolean", default: false }
-            }
-        }
-    },
-    {
-        name: "get_contact",
-        description: "Get contact details — name, email, phone, associated account.",
-        inputSchema: {
-            type: "object",
-            properties: { contact_id: { type: "string" } },
-            required: ["contact_id"]
-        }
-    },
-    {
-        name: "search_contacts",
-        description: "Search contacts by name, email, or phone. Returns summary fields only. Use get_contact for full details.",
-        inputSchema: {
-            type: "object",
-            properties: { query: { type: "string" }, page: { type: "number", default: 1 } },
-            required: ["query"]
-        }
-    },
-    {
-        name: "get_account",
-        description: "Get account details — business name, contacts, associated events.",
-        inputSchema: {
-            type: "object",
-            properties: { account_id: { type: "string" } },
-            required: ["account_id"]
-        }
-    },
-    {
-        name: "search_accounts",
-        description: "Search accounts by name or email. Returns summary fields only. Use get_account for full details.",
-        inputSchema: {
-            type: "object",
-            properties: { query: { type: "string" }, page: { type: "number", default: 1 } },
-            required: ["query"]
-        }
-    },
-    {
-        name: "list_sites",
-        description: "List all sites (top-level venue groups).",
-        inputSchema: { type: "object", properties: {} }
-    },
-    {
-        name: "list_locations",
-        description: "List all venue locations and their rooms/areas. Returns Knotting Hill Place and Brighton Abbey with spaces and capacities.",
-        inputSchema: { type: "object", properties: {} }
-    },
-    {
-        name: "get_location",
-        description: "Get details for a specific venue location — address, rooms, capacity.",
-        inputSchema: {
-            type: "object",
-            properties: { location_id: { type: "string" } },
-            required: ["location_id"]
-        }
-    },
-    {
-        name: "list_users",
-        description: "List all TripleSeat users (team members).",
-        inputSchema: { type: "object", properties: {} }
-    },
-    // ── Write Tools ──
-    {
-        name: "create_lead",
-        description: "Create a new lead in TripleSeat. Requires first_name, last_name, email_address, and phone_number at minimum.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                first_name: { type: "string", description: "Contact first name" },
-                last_name: { type: "string", description: "Contact last name" },
-                email_address: { type: "string", description: "Contact email" },
-                phone_number: { type: "string", description: "Contact phone number" },
-                company: { type: "string", description: "Company or organization name" },
-                event_description: { type: "string", description: "Nature of event (becomes the event name when converted)" },
-                event_date: { type: "string", description: "Requested event date (MM/DD/YYYY)" },
-                start_time: { type: "string", description: "Requested start time (e.g. 3:00 PM)" },
-                end_time: { type: "string", description: "Requested end time (e.g. 5:00 PM)" },
-                guest_count: { type: "number", description: "Expected number of guests" },
-                location_id: { type: "number", description: "Location ID (required if multiple locations)" },
-                additional_information: { type: "string", description: "Additional details or notes" },
-                contact_preference: { type: "string", enum: ["Email", "Phone"], description: "Preferred contact method" }
-            },
-            required: ["first_name", "last_name", "email_address", "phone_number"]
-        }
-    },
-    {
-        name: "update_lead",
-        description: "Update an existing lead in TripleSeat. Only include fields you want to change.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                lead_id: { type: "string", description: "The TripleSeat lead ID to update" },
-                first_name: { type: "string" },
-                last_name: { type: "string" },
-                email_address: { type: "string" },
-                phone_number: { type: "string" },
-                company: { type: "string" },
-                event_description: { type: "string" },
-                event_date: { type: "string", description: "MM/DD/YYYY" },
-                start_time: { type: "string" },
-                end_time: { type: "string" },
-                guest_count: { type: "number" },
-                location_id: { type: "number" },
-                additional_information: { type: "string" },
-                status: { type: "string" }
-            },
-            required: ["lead_id"]
-        }
-    },
-    {
-        name: "create_booking",
-        description: "Create a new booking in TripleSeat. Requires name, start_date, end_date, and location_id.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                name: { type: "string", description: "Booking name" },
-                start_date: { type: "string", description: "Start date (MM/DD/YYYY)" },
-                end_date: { type: "string", description: "End date (MM/DD/YYYY)" },
-                location_id: { type: "number", description: "Location ID for the venue" },
-                account_id: { type: "number", description: "Account ID to associate" },
-                contact_id: { type: "number", description: "Primary contact ID" },
-                status: { type: "string", description: "Booking status" },
-                description: { type: "string", description: "Booking description or notes" }
-            },
-            required: ["name", "start_date", "end_date", "location_id"]
-        }
-    },
-    {
-        name: "update_booking",
-        description: "Update an existing booking in TripleSeat. Only include fields you want to change.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                booking_id: { type: "string", description: "The TripleSeat booking ID to update" },
-                name: { type: "string" },
-                start_date: { type: "string", description: "MM/DD/YYYY" },
-                end_date: { type: "string", description: "MM/DD/YYYY" },
-                location_id: { type: "number" },
-                status: { type: "string" },
-                description: { type: "string" }
-            },
-            required: ["booking_id"]
-        }
-    },
-    {
-        name: "create_event",
-        description: "Create a new event in TripleSeat. Requires name, event_start, event_end, account_id, contact_id, location_id, room_ids, and status.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                name: { type: "string", description: "Event name" },
-                event_start: { type: "string", description: "Event start date/time (MM/DD/YYYY HH:MM AM/PM)" },
-                event_end: { type: "string", description: "Event end date/time (MM/DD/YYYY HH:MM AM/PM)" },
-                account_id: { type: "number", description: "Account ID" },
-                contact_id: { type: "number", description: "Primary contact ID" },
-                location_id: { type: "number", description: "Location ID" },
-                room_ids: { type: "array", items: { type: "number" }, description: "Array of room IDs for the event" },
-                status: { type: "string", enum: ["DEFINITE", "TENTATIVE", "PROSPECT", "CLOSED", "LOST"], description: "Event status" },
-                guest_count: { type: "number", description: "Expected guest count" },
-                description: { type: "string", description: "Event description" }
-            },
-            required: ["name", "event_start", "event_end", "account_id", "contact_id", "location_id", "room_ids", "status"]
-        }
-    },
-    {
-        name: "update_event",
-        description: "Update an existing event in TripleSeat. Only include fields you want to change.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                event_id: { type: "string", description: "The TripleSeat event ID to update" },
-                name: { type: "string" },
-                event_start: { type: "string", description: "MM/DD/YYYY HH:MM AM/PM" },
-                event_end: { type: "string", description: "MM/DD/YYYY HH:MM AM/PM" },
-                status: { type: "string", enum: ["DEFINITE", "TENTATIVE", "PROSPECT", "CLOSED", "LOST"] },
-                guest_count: { type: "number" },
-                description: { type: "string" },
-                room_ids: { type: "array", items: { type: "number" } }
-            },
-            required: ["event_id"]
-        }
-    },
-    {
-        name: "create_contact",
-        description: "Create a new contact in TripleSeat. Requires first_name and account_id. Include site_id if there are multiple sites.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                first_name: { type: "string", description: "Contact first name" },
-                last_name: { type: "string", description: "Contact last name" },
-                account_id: { type: "number", description: "Account to associate the contact with" },
-                site_id: { type: "number", description: "Site ID (only required if multiple sites exist)" },
-                email: { type: "string", description: "Email address" },
-                phone: { type: "string", description: "Phone number" },
-                title: { type: "string", description: "Job title" }
-            },
-            required: ["first_name", "account_id"]
-        }
-    },
-    {
-        name: "update_contact",
-        description: "Update an existing contact in TripleSeat. Only include fields you want to change.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                contact_id: { type: "string", description: "The TripleSeat contact ID to update" },
-                first_name: { type: "string" },
-                last_name: { type: "string" },
-                email: { type: "string" },
-                phone: { type: "string" },
-                title: { type: "string" },
-                company: { type: "string" }
-            },
-            required: ["contact_id"]
-        }
-    },
-    {
-        name: "create_account",
-        description: "Create a new account in TripleSeat. Requires name. Include site_id if there are multiple sites.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                name: { type: "string", description: "Account/business name" },
-                site_id: { type: "number", description: "Site ID (only required if multiple sites exist)" },
-                description: { type: "string", description: "Account description" },
-                email: { type: "string", description: "Account email" },
-                phone: { type: "string", description: "Account phone number" }
-            },
-            required: ["name"]
-        }
-    },
-    {
-        name: "update_account",
-        description: "Update an existing account in TripleSeat. Only include fields you want to change.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                account_id: { type: "string", description: "The TripleSeat account ID to update" },
-                name: { type: "string" },
-                description: { type: "string" },
-                email: { type: "string" },
-                phone: { type: "string" }
-            },
-            required: ["account_id"]
-        }
-    },
-    {
-        name: "create_lead_task",
-        description: "Create a task on a lead in TripleSeat.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                lead_id: { type: "string", description: "The lead ID to add the task to" },
-                body: { type: "string", description: "Task description" },
-                due_date: { type: "string", description: "Due date/time in ISO 8601 format" },
-                priority: { type: "number", enum: [1, 2, 3], description: "Priority: 1=Low, 2=Medium, 3=High" },
-                task_type_id: { type: "number", description: "Task type ID (see Sites API for available types)" },
-                assignee_ids: { type: "array", items: { type: "number" }, description: "User IDs to assign the task to" },
-                site_id: { type: "number", description: "Site ID the lead belongs to" }
-            },
-            required: ["lead_id", "body", "due_date", "priority", "task_type_id", "assignee_ids", "site_id"]
-        }
-    },
-    {
-        name: "create_booking_task",
-        description: "Create a task on a booking in TripleSeat.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                booking_id: { type: "string", description: "The booking ID to add the task to" },
-                body: { type: "string", description: "Task description" },
-                due_date: { type: "string", description: "Due date/time in ISO 8601 format" },
-                priority: { type: "number", enum: [1, 2, 3], description: "Priority: 1=Low, 2=Medium, 3=High" },
-                task_type_id: { type: "number", description: "Task type ID (see Sites API for available types)" },
-                assignee_ids: { type: "array", items: { type: "number" }, description: "User IDs to assign the task to" },
-                site_id: { type: "number", description: "Site ID the booking belongs to" }
-            },
-            required: ["booking_id", "body", "due_date", "priority", "task_type_id", "assignee_ids", "site_id"]
-        }
-    },
-    {
-        name: "create_contact_task",
-        description: "Create a task on a contact in TripleSeat.",
-        inputSchema: {
-            type: "object",
-            properties: {
-                contact_id: { type: "string", description: "The contact ID to add the task to" },
-                body: { type: "string", description: "Task description" },
-                due_date: { type: "string", description: "Due date/time in ISO 8601 format" },
-                priority: { type: "number", enum: [1, 2, 3], description: "Priority: 1=Low, 2=Medium, 3=High" },
-                task_type_id: { type: "number", description: "Task type ID (see Sites API for available types)" },
-                assignee_ids: { type: "array", items: { type: "number" }, description: "User IDs to assign the task to" },
-                site_id: { type: "number", description: "Site ID the contact belongs to" }
-            },
-            required: ["contact_id", "body", "due_date", "priority", "task_type_id", "assignee_ids", "site_id"]
-        }
-    }
-];
-// ── Response Size Management ──
-const MAX_RESPONSE_CHARS = 12000;
-const EVENT_SUMMARY_FIELDS = ["id", "name", "status", "event_start", "event_end", "location", "location_id", "room", "guest_count", "created_at"];
-const LEAD_SUMMARY_FIELDS = ["id", "first_name", "last_name", "email", "phone", "status", "location", "location_id", "event_date", "guest_count", "created_at", "lead_source"];
-const BOOKING_SUMMARY_FIELDS = ["id", "event_id", "status", "total", "balance_due", "created_at", "location", "location_id"];
-const CONTACT_SUMMARY_FIELDS = ["id", "first_name", "last_name", "email", "phone", "company", "account_id"];
-const ACCOUNT_SUMMARY_FIELDS = ["id", "name", "email", "phone", "address"];
-function summarizeItem(item, fields) {
-    if (!item || typeof item !== "object")
-        return item;
-    const summary = {};
-    for (const f of fields) {
-        if (item[f] !== undefined)
-            summary[f] = item[f];
-    }
-    return summary;
-}
-function summarizeList(data, fields) {
-    const items = Array.isArray(data) ? data : data?.results || data?.data || [];
-    const summarized = items.map((item) => summarizeItem(item, fields));
-    return {
-        items: summarized,
-        total: data?.total_count ?? items.length,
-        page: data?.page,
-        truncatedFields: true,
-    };
-}
-function truncateResponse(text, toolName) {
-    if (text.length <= MAX_RESPONSE_CHARS)
-        return text;
-    const hint = toolName.startsWith("search_") || toolName.startsWith("list_")
-        ? `\n\n[Response truncated at ${MAX_RESPONSE_CHARS} chars. Use get_event, get_lead, get_booking, or get_contact for full details on specific items.]`
-        : `\n\n[Response truncated at ${MAX_RESPONSE_CHARS} chars.]`;
-    return text.substring(0, MAX_RESPONSE_CHARS) + hint;
-}
-// ── Tool Execution ──
-async function executeTool(name, args) {
-    const params = {};
-    switch (name) {
-        case "get_event": {
-            if (args.include_financials)
-                params.show_financial = "true";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)(`/events/${args.event_id}`, params);
-            return JSON.stringify(data, null, 2);
-        }
-        case "search_events": {
-            if (args.query)
-                params.query = args.query;
-            if (args.status)
-                params.status = args.status;
-            if (args.from_date)
-                params.event_start_date = args.from_date;
-            if (args.to_date)
-                params.event_end_date = args.to_date;
-            if (args.location_id)
-                params.location_id = args.location_id;
-            if (args.page)
-                params.page = String(args.page);
-            if (args.order)
-                params.order = args.order;
-            if (args.sort_direction)
-                params.sort_direction = args.sort_direction;
-            if (args.include_financials)
-                params.show_financial = "true";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/events/search", params);
-            const result = summarizeList(data, EVENT_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "list_upcoming_events": {
-            params.event_start_date = args.from_date;
-            params.event_end_date = args.to_date;
-            params.order = "event_start";
-            params.sort_direction = "asc";
-            if (args.location_id)
-                params.location_id = args.location_id;
-            if (args.include_financials)
-                params.show_financial = "true";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/events/search", params);
-            const result = summarizeList(data, EVENT_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "check_availability": {
-            params.event_start_date = args.date;
-            params.event_end_date = args.date;
-            params.order = "event_start";
-            params.sort_direction = "asc";
-            if (args.location_id)
-                params.location_id = args.location_id;
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/events/search", params);
-            const events = Array.isArray(data) ? data : data?.results || [];
-            const summary = events.length === 0
-                ? `No events found on ${args.date}. The date appears to be available.`
-                : `Found ${events.length} event(s) on ${args.date}.`;
-            const summarized = summarizeList(data, EVENT_SUMMARY_FIELDS);
-            return truncateResponse(summary + "\n" + JSON.stringify(summarized), name);
-        }
-        case "get_lead": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)(`/leads/${args.lead_id}`);
-            return JSON.stringify(data, null, 2);
-        }
-        case "search_leads": {
-            if (args.query)
-                params.query = args.query;
-            if (args.status)
-                params.status = args.status;
-            if (args.location_id)
-                params.location_id = args.location_id;
-            if (args.from_date)
-                params.from_date = args.from_date;
-            if (args.to_date)
-                params.to_date = args.to_date;
-            if (args.page)
-                params.page = String(args.page);
-            params.order = "created_at";
-            params.sort_direction = "desc";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/leads/search", params);
-            const result = summarizeList(data, LEAD_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "list_recent_leads": {
-            if (args.page)
-                params.page = String(args.page);
-            if (args.location_id)
-                params.location_id = args.location_id;
-            params.order = "created_at";
-            params.sort_direction = "desc";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/leads/search", params);
-            const result = summarizeList(data, LEAD_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "get_booking": {
-            if (args.include_financials !== false)
-                params.show_financial = "true";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)(`/bookings/${args.booking_id}`, params);
-            return JSON.stringify(data, null, 2);
-        }
-        case "search_bookings": {
-            if (args.query)
-                params.query = args.query;
-            if (args.from_date)
-                params.booking_start_date = args.from_date;
-            if (args.to_date)
-                params.booking_end_date = args.to_date;
-            if (args.page)
-                params.page = String(args.page);
-            params.order = args.order || "created_at";
-            params.sort_direction = args.sort_direction || "desc";
-            if (args.include_financials)
-                params.show_financial = "true";
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/bookings/search", params);
-            const result = summarizeList(data, BOOKING_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "get_contact": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)(`/contacts/${args.contact_id}`);
-            return JSON.stringify(data, null, 2);
-        }
-        case "search_contacts": {
-            params.query = args.query;
-            if (args.page)
-                params.page = String(args.page);
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/contacts/search", params);
-            const result = summarizeList(data, CONTACT_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "get_account": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)(`/accounts/${args.account_id}`);
-            return JSON.stringify(data, null, 2);
-        }
-        case "search_accounts": {
-            params.query = args.query;
-            if (args.page)
-                params.page = String(args.page);
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/accounts/search", params);
-            const result = summarizeList(data, ACCOUNT_SUMMARY_FIELDS);
-            return truncateResponse(JSON.stringify(result), name);
-        }
-        case "list_sites": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/sites");
-            return JSON.stringify(data, null, 2);
-        }
-        case "list_locations": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/locations");
-            return JSON.stringify(data, null, 2);
-        }
-        case "get_location": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)(`/locations/${args.location_id}`);
-            return JSON.stringify(data, null, 2);
-        }
-        case "list_users": {
-            const { data } = await (0, tripleseat_js_1.tripleseatGet)("/users");
-            return JSON.stringify(data, null, 2);
-        }
-        // ── Write Tools ──
-        case "create_lead": {
-            const { lead_id, ...leadFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/leads", { lead: leadFields });
-            return JSON.stringify(data, null, 2);
-        }
-        case "update_lead": {
-            const { lead_id, ...leadFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/leads/${lead_id}`, { lead: leadFields });
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_booking": {
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/bookings", { booking: args });
-            return JSON.stringify(data, null, 2);
-        }
-        case "update_booking": {
-            const { booking_id, ...bookingFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/bookings/${booking_id}`, { booking: bookingFields });
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_event": {
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/events", { event: args });
-            return JSON.stringify(data, null, 2);
-        }
-        case "update_event": {
-            const { event_id, ...eventFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/events/${event_id}`, { event: eventFields });
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_contact": {
-            const { site_id, ...contactFields } = args;
-            const body = { contact: contactFields };
-            if (site_id)
-                body.site_id = site_id;
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/contacts", body);
-            return JSON.stringify(data, null, 2);
-        }
-        case "update_contact": {
-            const { contact_id, ...contactFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/contacts/${contact_id}`, { contact: contactFields });
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_account": {
-            const { site_id: acctSiteId, ...accountFields } = args;
-            const body = { account: accountFields };
-            if (acctSiteId)
-                body.site_id = acctSiteId;
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/accounts", body);
-            return JSON.stringify(data, null, 2);
-        }
-        case "update_account": {
-            const { account_id, ...accountFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/accounts/${account_id}`, { account: accountFields });
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_lead_task": {
-            const { lead_id: taskLeadId, ...taskFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)(`/leads/${taskLeadId}/tasks`, taskFields);
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_booking_task": {
-            const { booking_id: taskBookingId, ...taskFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)(`/bookings/${taskBookingId}/tasks`, taskFields);
-            return JSON.stringify(data, null, 2);
-        }
-        case "create_contact_task": {
-            const { contact_id: taskContactId, ...taskFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPost)(`/contacts/${taskContactId}/tasks`, taskFields);
-            return JSON.stringify(data, null, 2);
-        }
-        default:
-            throw new Error(`Unknown tool: ${name}`);
-    }
-}
-// ── Server Info ──
-const SERVER_INFO = {
-    name: "tripleseat",
-    version: "1.0.0",
-};
-const SERVER_INSTRUCTIONS = `You are connected to TripleSeat, a CRM and event management platform for wedding and event venues. This server provides live read AND write access to event data, leads, bookings, contacts, accounts, and venue locations.
-
-Key context for this installation:
-- Two venues: Knotting Hill Place and Brighton Abbey (both in the DFW area, ~10 minutes apart)
-- The team handles ~700 inbound leads per month, booking 40-50 weddings
-- Events always have at least: a booking, account, contact, location, and room
-- Financial data is available on events and bookings when requested
-- Use location IDs to filter results by venue when the user asks about a specific property
-
-IMPORTANT — Response size management:
-- Search and list tools return SUMMARY fields only (id, name, dates, status, location) to conserve context window
-- To get full details (BEOs, packages, vendors, financials), use the get_event, get_lead, get_booking, or get_contact tools with the specific ID
-- Always use the search/list → then get_detail pattern: find items first, then drill into the ones the user cares about
-- Do NOT call get_event/get_lead/get_booking for every item in a list — only fetch full details when the user asks about a specific item
-
-IMPORTANT — Write operations safety:
-- ALWAYS confirm with the user before creating or modifying any records
-- Summarize exactly what will be created or changed and get explicit approval before calling a write tool
-- For updates, show the current value and the proposed new value so the user can verify
-- Never bulk-create or bulk-update records without per-record user confirmation
-- When creating events, all required fields must be provided: name, event_start, event_end, account_id, contact_id, location_id, room_ids, and status
-- When creating leads, first_name, last_name, email_address, and phone_number are required
-- Task creation requires body, due_date, priority, task_type_id, assignee_ids, and site_id
-
-When answering questions:
-- Be specific with dates, names, and numbers pulled from the data
-- Flag any missing or incomplete fields — data quality visibility is a feature
-- If a search returns no results, suggest broadening the query
-- For availability checks, always check both venues unless told otherwise`;
-// ── JSON-RPC Handler ──
-function jsonrpcResponse(id, result) {
-    return { jsonrpc: "2.0", id, result };
-}
-function jsonrpcError(id, code, message) {
-    return { jsonrpc: "2.0", id, error: { code, message } };
-}
-async function handleMessage(msg, req) {
-    const { method, id, params } = msg;
-    switch (method) {
-        case "initialize":
-            return jsonrpcResponse(id, {
-                protocolVersion: "2025-03-26",
-                capabilities: { tools: { listChanged: false } },
-                serverInfo: SERVER_INFO,
-                instructions: SERVER_INSTRUCTIONS,
-            });
-        case "notifications/initialized":
-            return null;
-        case "ping":
-            return jsonrpcResponse(id, {});
-        case "tools/list": {
-            let tools = TOOLS;
-            if (req.user?.role?.allowed_tools) {
-                const allowed = new Set(req.user.role.allowed_tools);
-                tools = TOOLS.filter((t) => allowed.has(t.name));
-            }
-            return jsonrpcResponse(id, { tools });
-        }
-        case "tools/call": {
-            const toolName = params?.name;
-            const toolArgs = params?.arguments || {};
-            if (req.user?.role?.allowed_tools) {
-                if (!req.user.role.allowed_tools.includes(toolName)) {
-                    return jsonrpcError(id, -32001, `Tool "${toolName}" is not allowed for your role "${req.user.role.name}"`);
-                }
-            }
-            // Strip financials for roles without booking access
-            if (req.user?.role?.allowed_tools && !req.user.role.allowed_tools.includes("get_booking")) {
-                toolArgs.include_financials = false;
-            }
-            const startTime = Date.now();
-            try {
-                const result = await executeTool(toolName, toolArgs);
-                const durationMs = Date.now() - startTime;
-                (0, usage_js_1.logToolCall)(req.user?.id || null, toolName, toolArgs, true, undefined, durationMs);
-                return jsonrpcResponse(id, {
-                    content: [{ type: "text", text: result }],
-                });
-            }
-            catch (error) {
-                const durationMs = Date.now() - startTime;
-                (0, usage_js_1.logToolCall)(req.user?.id || null, toolName, toolArgs, false, error.message, durationMs);
-                return jsonrpcResponse(id, {
-                    content: [{ type: "text", text: `Error: ${error.message}` }],
-                    isError: true,
-                });
-            }
-        }
-        default:
-            return jsonrpcError(id, -32601, `Method not found: ${method}`);
-    }
-}
 // ── MCP Endpoint ──
 app.post("/mcp", middleware_js_1.oauthTokenAuth, async (req, res) => {
     try {
         const body = req.body;
         if (Array.isArray(body)) {
-            const results = await Promise.all(body.map((msg) => handleMessage(msg, req)));
+            const results = await Promise.all(body.map((msg) => (0, mcp_js_1.handleMessage)(msg, req)));
             const responses = results.filter((r) => r !== null);
             if (responses.length === 0) {
                 res.status(202).end();
@@ -1210,7 +421,7 @@ app.post("/mcp", middleware_js_1.oauthTokenAuth, async (req, res) => {
             }
             return;
         }
-        const result = await handleMessage(body, req);
+        const result = await (0, mcp_js_1.handleMessage)(body, req);
         if (result === null) {
             res.status(202).end();
         }
@@ -1220,11 +431,11 @@ app.post("/mcp", middleware_js_1.oauthTokenAuth, async (req, res) => {
     }
     catch (error) {
         console.error("[MCP Error]", error);
-        res.status(500).json(jsonrpcError(null, -32603, "Internal server error"));
+        res.status(500).json((0, mcp_js_1.jsonrpcError)(null, -32603, "Internal server error"));
     }
 });
 app.get("/mcp", (_req, res) => {
-    res.status(405).json(jsonrpcError(null, -32000, "Use POST for MCP requests"));
+    res.status(405).json((0, mcp_js_1.jsonrpcError)(null, -32000, "Use POST for MCP requests"));
 });
 app.delete("/mcp", (_req, res) => {
     res.status(200).json({ ok: true });

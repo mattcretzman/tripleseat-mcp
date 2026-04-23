@@ -3,6 +3,7 @@
  */
 
 import { query, queryOne } from "./db.js";
+import { getAllToolNames } from "./tools/registry.js";
 
 export interface Role {
   id: string;
@@ -13,42 +14,11 @@ export interface Role {
   updated_at: string;
 }
 
-const ALL_TOOLS = [
-  // Read tools
-  "get_event",
-  "search_events",
-  "list_upcoming_events",
-  "check_availability",
-  "get_lead",
-  "search_leads",
-  "list_recent_leads",
-  "get_booking",
-  "search_bookings",
-  "get_contact",
-  "search_contacts",
-  "get_account",
-  "search_accounts",
-  "list_sites",
-  "list_locations",
-  "get_location",
-  "list_users",
-  // Write tools
-  "create_lead",
-  "update_lead",
-  "create_booking",
-  "update_booking",
-  "create_event",
-  "update_event",
-  "create_contact",
-  "update_contact",
-  "create_account",
-  "update_account",
-  "create_lead_task",
-  "create_booking_task",
-  "create_contact_task",
-] as const;
-
-export { ALL_TOOLS };
+/**
+ * All registered tool names, derived from the tool registry.
+ * Used by the admin dashboard and role seeding.
+ */
+export const ALL_TOOLS: readonly string[] = getAllToolNames();
 
 /**
  * List all roles.
@@ -123,16 +93,18 @@ export async function updateRole(
  * Seed default roles (uses ON CONFLICT to skip existing).
  */
 export async function seedDefaultRoles(): Promise<{ created: string[]; updated: string[]; skipped: boolean }> {
+  const allToolNames = getAllToolNames();
+
   const defaults = [
     {
       name: "admin",
-      description: "Full access to all 30 tools (read + write)",
-      allowed_tools: [...ALL_TOOLS],
+      description: "Full access to all tools (read + write)",
+      allowed_tools: [...allToolNames],
     },
     {
       name: "manager",
       description: "All tools except user management",
-      allowed_tools: ALL_TOOLS.filter((t) => t !== "list_users"),
+      allowed_tools: allToolNames.filter((t) => t !== "list_users"),
     },
     {
       name: "coordinator",
@@ -193,7 +165,6 @@ export async function seedDefaultRoles(): Promise<{ created: string[]; updated: 
       [role.name, role.description, role.allowed_tools]
     );
     if (row) {
-      // xmax = '0' means INSERT, otherwise UPDATE
       if (row.xmax === "0") {
         created.push(row.name);
       } else {

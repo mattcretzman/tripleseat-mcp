@@ -10,41 +10,12 @@ exports.createRole = createRole;
 exports.updateRole = updateRole;
 exports.seedDefaultRoles = seedDefaultRoles;
 const db_js_1 = require("./db.js");
-const ALL_TOOLS = [
-    // Read tools
-    "get_event",
-    "search_events",
-    "list_upcoming_events",
-    "check_availability",
-    "get_lead",
-    "search_leads",
-    "list_recent_leads",
-    "get_booking",
-    "search_bookings",
-    "get_contact",
-    "search_contacts",
-    "get_account",
-    "search_accounts",
-    "list_sites",
-    "list_locations",
-    "get_location",
-    "list_users",
-    // Write tools
-    "create_lead",
-    "update_lead",
-    "create_booking",
-    "update_booking",
-    "create_event",
-    "update_event",
-    "create_contact",
-    "update_contact",
-    "create_account",
-    "update_account",
-    "create_lead_task",
-    "create_booking_task",
-    "create_contact_task",
-];
-exports.ALL_TOOLS = ALL_TOOLS;
+const registry_js_1 = require("./tools/registry.js");
+/**
+ * All registered tool names, derived from the tool registry.
+ * Used by the admin dashboard and role seeding.
+ */
+exports.ALL_TOOLS = (0, registry_js_1.getAllToolNames)();
 /**
  * List all roles.
  */
@@ -98,16 +69,17 @@ async function updateRole(id, updates) {
  * Seed default roles (uses ON CONFLICT to skip existing).
  */
 async function seedDefaultRoles() {
+    const allToolNames = (0, registry_js_1.getAllToolNames)();
     const defaults = [
         {
             name: "admin",
-            description: "Full access to all 30 tools (read + write)",
-            allowed_tools: [...ALL_TOOLS],
+            description: "Full access to all tools (read + write)",
+            allowed_tools: [...allToolNames],
         },
         {
             name: "manager",
             description: "All tools except user management",
-            allowed_tools: ALL_TOOLS.filter((t) => t !== "list_users"),
+            allowed_tools: allToolNames.filter((t) => t !== "list_users"),
         },
         {
             name: "coordinator",
@@ -163,7 +135,6 @@ async function seedDefaultRoles() {
              updated_at = NOW()
        RETURNING name, xmax::text`, [role.name, role.description, role.allowed_tools]);
         if (row) {
-            // xmax = '0' means INSERT, otherwise UPDATE
             if (row.xmax === "0") {
                 created.push(row.name);
             }
