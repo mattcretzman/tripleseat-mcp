@@ -5,7 +5,8 @@
 import { Router, Request, Response } from "express";
 import { adminAuth, createAdminSession, deleteAdminSession } from "../middleware.js";
 import { authenticateUser, createUser, listUsers, updateUser, deactivateUser, resetPassword } from "../users.js";
-import { listRoles, createRole, updateRole, seedDefaultRoles } from "../roles.js";
+import { listRoles, createRole, updateRole, seedDefaultRoles, getRole } from "../roles.js";
+import { sendInviteEmail } from "../email.js";
 import { getRecentUsage, getUsageStats } from "../usage.js";
 import { loginPage, dashboardPage } from "./views.js";
 
@@ -97,19 +98,72 @@ router.get("/api/users", async (_req: Request, res: Response) => {
 
 router.post("/api/users", async (req: Request, res: Response) => {
   try {
-    const { email, name, password, role_id, is_admin } = req.body;
+    const { email, name, password, role_id, is_admin, send_invite } = req.body;
     if (!email || !name || !password || !role_id) {
       res.status(400).json({ error: "email, name, password, and role_id are required" });
       return;
     }
     const user = await createUser(email, name, password, role_id, is_admin || false);
-    res.json({ id: user.id, email: user.email, name: user.name, role_id: user.role_id, is_admin: user.is_admin });
+
+    let invite_sent = false;
+    let invite_error: string | undefined;
+
+    if (send_invite) {
+      const role = await getRole(role_id);
+      const result = await sendInviteEmail({
+        to: email,
+        name,
+        password,
+        roleName: role?.name || "user",
+        invitedBy: "Admin",
+      });
+      invite_sent = result.success;
+      invite_error = result.error;
+    }
+
+    res.json({
+      id: user.id, email: user.email, name: user.name,
+      role_id: user.role_id, is_admin: user.is_admin,
+      invite_sent, invite_error,
+    });
   } catch (err: any) {
     if (err.message?.includes("duplicate key") || err.message?.includes("unique")) {
       res.status(409).json({ error: "A user with that email already exists" });
     } else {
       res.status(500).json({ error: err.message });
     }
+  }
+});
+
+router.post("/api/users/:id/send-invite", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { password } = req.body;
+    if (!password) {
+      res.status(400).json({ error: "password is required to include in the invite" });
+      return;
+    }
+
+    const users = await listUsers();
+    const user = users.find((u: any) => u.id === id);
+    if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+    const role = await getRole(user.role_id);
+    const result = await sendInviteEmail({
+      to: user.email,
+      name: user.name,
+      password,
+      roleName: role?.name || "user",
+      invitedBy: "Admin",
+    });
+
+    if (result.success) {
+      res.json({ ok: true });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

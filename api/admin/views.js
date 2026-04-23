@@ -430,8 +430,12 @@ function dashboardPage(data) {
           <input type="checkbox" id="new-user-admin">
           <label for="new-user-admin">Admin access (can manage users and roles)</label>
         </div>
+        <div class="checkbox-row" style="margin-bottom: 16px">
+          <input type="checkbox" id="new-user-invite" checked>
+          <label for="new-user-invite">Send invite email with login credentials and setup instructions</label>
+        </div>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-primary btn-sm" id="create-user-btn" onclick="createUser()">Create User</button>
+          <button class="btn btn-primary btn-sm" id="create-user-btn" onclick="createUser()">Create &amp; Invite</button>
           <button class="btn btn-secondary btn-sm" onclick="toggleForm('create-user-form')">Cancel</button>
         </div>
       </div>
@@ -650,7 +654,8 @@ function dashboardPage(data) {
           '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(u.last_active_at) + '</td>' +
           '<td style="display:flex;gap:6px">' +
             (u.is_active
-              ? '<button class="btn btn-secondary btn-sm" onclick="showResetPassword(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Reset PW</button>' +
+              ? '<button class="btn btn-primary btn-sm" onclick="showResendInvite(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\', \\'' + esc(u.email) + '\\')">Send Invite</button>' +
+                '<button class="btn btn-secondary btn-sm" onclick="showResetPassword(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Reset PW</button>' +
                 '<button class="btn btn-danger btn-sm" onclick="deactivateUser(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Deactivate</button>'
               : '<button class="btn btn-secondary btn-sm" onclick="reactivateUser(\\'' + u.id + '\\')">Reactivate</button>') +
           '</td>' +
@@ -664,17 +669,18 @@ function dashboardPage(data) {
       const password = document.getElementById('new-user-password').value;
       const roleId = document.getElementById('new-user-role').value;
       const isAdmin = document.getElementById('new-user-admin').checked;
+      const sendInvite = document.getElementById('new-user-invite').checked;
 
       if (!name || !email || !password) { toast('All fields are required', 'error'); return; }
 
       const btn = document.getElementById('create-user-btn');
       btn.disabled = true;
-      btn.textContent = 'Creating...';
+      btn.textContent = sendInvite ? 'Creating & sending...' : 'Creating...';
 
       try {
-        await api('/admin/api/users', {
+        const result = await api('/admin/api/users', {
           method: 'POST',
-          body: JSON.stringify({ name, email, password, role_id: roleId, is_admin: isAdmin }),
+          body: JSON.stringify({ name, email, password, role_id: roleId, is_admin: isAdmin, send_invite: sendInvite }),
         });
 
         usersData = await api('/admin/api/users');
@@ -684,12 +690,20 @@ function dashboardPage(data) {
         document.getElementById('new-user-email').value = '';
         document.getElementById('new-user-password').value = '';
         document.getElementById('new-user-admin').checked = false;
-        toast('User created: ' + name);
+        document.getElementById('new-user-invite').checked = true;
+
+        if (sendInvite && result.invite_sent) {
+          toast('User created and invite sent to ' + email);
+        } else if (sendInvite && !result.invite_sent) {
+          toast('User created but invite failed: ' + (result.invite_error || 'unknown error'), 'error');
+        } else {
+          toast('User created: ' + name);
+        }
       } catch (e) {
         toast('Failed: ' + e.message, 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Create User';
+        btn.textContent = 'Create & Invite';
       }
     }
 
@@ -737,6 +751,53 @@ function dashboardPage(data) {
         toast('Password reset successfully');
       } catch (e) {
         toast('Failed: ' + e.message, 'error');
+      }
+    }
+
+    function showResendInvite(userId, name, email) {
+      const html = '<div class="confirm-overlay" id="resend-invite-overlay">' +
+        '<div class="confirm-box">' +
+        '<h3>Send Invite: ' + esc(name) + '</h3>' +
+        '<p>Enter a password to include in the invite email to <strong>' + esc(email) + '</strong>. This will also reset their password.</p>' +
+        '<div class="form-group" style="margin-bottom:16px">' +
+          '<input type="password" id="resend-invite-pw" placeholder="Password for this user" style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:var(--font);outline:none">' +
+        '</div>' +
+        '<div class="confirm-actions">' +
+          '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'resend-invite-overlay\\').remove()">Cancel</button>' +
+          '<button class="btn btn-primary btn-sm" id="resend-invite-btn" onclick="doResendInvite(\\'' + userId + '\\')">Send Invite</button>' +
+        '</div></div></div>';
+
+      document.body.insertAdjacentHTML('beforeend', html);
+      document.getElementById('resend-invite-pw').focus();
+    }
+
+    async function doResendInvite(userId) {
+      const password = document.getElementById('resend-invite-pw').value;
+      if (!password) { toast('Password is required', 'error'); return; }
+
+      const btn = document.getElementById('resend-invite-btn');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+
+      try {
+        // Reset the password first
+        await api('/admin/api/users/' + userId + '/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ password }),
+        });
+
+        // Then send the invite
+        await api('/admin/api/users/' + userId + '/send-invite', {
+          method: 'POST',
+          body: JSON.stringify({ password }),
+        });
+
+        document.getElementById('resend-invite-overlay').remove();
+        toast('Invite email sent');
+      } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+        btn.disabled = false;
+        btn.textContent = 'Send Invite';
       }
     }
 

@@ -8,6 +8,7 @@ const express_1 = require("express");
 const middleware_js_1 = require("../middleware.js");
 const users_js_1 = require("../users.js");
 const roles_js_1 = require("../roles.js");
+const email_js_1 = require("../email.js");
 const usage_js_1 = require("../usage.js");
 const views_js_1 = require("./views.js");
 const router = (0, express_1.Router)();
@@ -85,13 +86,31 @@ router.get("/api/users", async (_req, res) => {
 });
 router.post("/api/users", async (req, res) => {
     try {
-        const { email, name, password, role_id, is_admin } = req.body;
+        const { email, name, password, role_id, is_admin, send_invite } = req.body;
         if (!email || !name || !password || !role_id) {
             res.status(400).json({ error: "email, name, password, and role_id are required" });
             return;
         }
         const user = await (0, users_js_1.createUser)(email, name, password, role_id, is_admin || false);
-        res.json({ id: user.id, email: user.email, name: user.name, role_id: user.role_id, is_admin: user.is_admin });
+        let invite_sent = false;
+        let invite_error;
+        if (send_invite) {
+            const role = await (0, roles_js_1.getRole)(role_id);
+            const result = await (0, email_js_1.sendInviteEmail)({
+                to: email,
+                name,
+                password,
+                roleName: role?.name || "user",
+                invitedBy: "Admin",
+            });
+            invite_sent = result.success;
+            invite_error = result.error;
+        }
+        res.json({
+            id: user.id, email: user.email, name: user.name,
+            role_id: user.role_id, is_admin: user.is_admin,
+            invite_sent, invite_error,
+        });
     }
     catch (err) {
         if (err.message?.includes("duplicate key") || err.message?.includes("unique")) {
@@ -100,6 +119,39 @@ router.post("/api/users", async (req, res) => {
         else {
             res.status(500).json({ error: err.message });
         }
+    }
+});
+router.post("/api/users/:id/send-invite", async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { password } = req.body;
+        if (!password) {
+            res.status(400).json({ error: "password is required to include in the invite" });
+            return;
+        }
+        const users = await (0, users_js_1.listUsers)();
+        const user = users.find((u) => u.id === id);
+        if (!user) {
+            res.status(404).json({ error: "User not found" });
+            return;
+        }
+        const role = await (0, roles_js_1.getRole)(user.role_id);
+        const result = await (0, email_js_1.sendInviteEmail)({
+            to: user.email,
+            name: user.name,
+            password,
+            roleName: role?.name || "user",
+            invitedBy: "Admin",
+        });
+        if (result.success) {
+            res.json({ ok: true });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 router.patch("/api/users/:id", async (req, res) => {
