@@ -15,7 +15,7 @@ import {
   exchangeCodeForTokens,
   storeTokens,
 } from "./auth.js";
-import { tripleseatGet, tripleseatPost, tripleseatPut, tripleseatPostLead } from "./tripleseat.js";
+import { tripleseatGet, tripleseatPost, tripleseatPut } from "./tripleseat.js";
 import { oauthTokenAuth } from "./middleware.js";
 import { adminRouter } from "./admin/routes.js";
 import { logToolCall } from "./usage.js";
@@ -1080,7 +1080,7 @@ async function executeTool(name: string, args: any): Promise<string> {
 
     case "create_lead": {
       const { lead_id, ...leadFields } = args;
-      const { data } = await tripleseatPostLead({ lead: leadFields });
+      const { data } = await tripleseatPost("/leads", { lead: leadFields });
       return JSON.stringify(data, null, 2);
     }
     case "update_lead": {

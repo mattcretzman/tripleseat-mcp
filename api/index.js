@@ -1027,7 +1027,7 @@ async function executeTool(name, args) {
         // ── Write Tools ──
         case "create_lead": {
             const { lead_id, ...leadFields } = args;
-            const { data } = await (0, tripleseat_js_1.tripleseatPostLead)({ lead: leadFields });
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/leads", { lead: leadFields });
             return JSON.stringify(data, null, 2);
         }
         case "update_lead": {
