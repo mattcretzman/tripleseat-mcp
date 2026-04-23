@@ -1,36 +1,35 @@
 /**
- * Express middleware for API key auth and admin session auth.
+ * Express middleware for OAuth token auth and admin session auth.
  */
 
 import { Request, Response, NextFunction } from "express";
 import crypto from "node:crypto";
-import { validateKey } from "./api-keys.js";
+import { validateToken } from "./oauth.js";
+import { getUser, touchLastActive } from "./users.js";
 import { query, queryOne } from "./db.js";
 
-// Extend Express Request
 declare global {
   namespace Express {
     interface Request {
-      apiKeyId?: string;
-      apiKeyLabel?: string;
-      role?: {
+      user?: {
         id: string;
+        email: string;
         name: string;
-        allowed_tools: string[];
+        role: {
+          id: string;
+          name: string;
+          allowed_tools: string[];
+        };
       };
-      hasApiKey?: boolean;
     }
   }
 }
 
 /**
- * API key authentication middleware for the /mcp endpoint.
- *
- * If a Bearer token is provided, validates it and attaches role info.
- * If no token is provided, allows the request through for backward
- * compatibility but sets hasApiKey = false so tools aren't filtered.
+ * OAuth token authentication middleware for the /mcp endpoint.
+ * Validates Bearer token and attaches user + role info to the request.
  */
-export async function apiKeyAuth(
+export async function oauthTokenAuth(
   req: Request,
   res: Response,
   next: NextFunction
@@ -38,83 +37,65 @@ export async function apiKeyAuth(
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    // No API key — allow through for backward compatibility
-    req.hasApiKey = false;
-    next();
+    res.status(401).json({
+      jsonrpc: "2.0",
+      id: req.body?.id || null,
+      error: { code: -32001, message: "Authentication required. Bearer token missing." },
+    });
     return;
   }
 
   const token = authHeader.substring(7);
 
   try {
-    // First try: direct API key validation (ts_ prefix)
-    let result = await validateKey(token);
+    const tokenInfo = await validateToken(token);
 
-    // Second try: OAuth token validation (oauth_ prefix)
-    if (!result && token.startsWith("oauth_")) {
-      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
-
-      // Look up the OAuth session to find the API key ID
-      const session = await queryOne<{ id: string }>(
-        `SELECT id FROM mcp_admin_sessions WHERE id LIKE $1 AND expires_at > NOW()`,
-        ["oauth:" + tokenHash + ":%"]
-      );
-
-      if (session) {
-        // Extract the API key ID from the session ID format: "oauth:<hash>:<keyId>"
-        const parts = session.id.split(":");
-        const keyId = parts[2];
-
-        // Look up the key and role directly
-        const keyRow = await queryOne<any>(
-          `SELECT k.*, r.name AS role_name, r.allowed_tools AS role_allowed_tools
-           FROM mcp_api_keys k
-           JOIN mcp_roles r ON r.id = k.role_id
-           WHERE k.id = $1 AND k.is_active = true`,
-          [keyId]
-        );
-
-        if (keyRow) {
-          result = {
-            apiKey: keyRow,
-            role: {
-              id: keyRow.role_id,
-              name: keyRow.role_name,
-              allowed_tools: keyRow.role_allowed_tools,
-            },
-          };
-
-          // Update last_used_at
-          query(`UPDATE mcp_api_keys SET last_used_at = NOW() WHERE id = $1`, [keyId]).catch(() => {});
-        }
-      }
-    }
-
-    if (!result) {
+    if (!tokenInfo) {
       res.status(401).json({
         jsonrpc: "2.0",
         id: req.body?.id || null,
-        error: { code: -32001, message: "Invalid or revoked API key" },
+        error: { code: -32001, message: "Invalid or expired access token" },
       });
       return;
     }
 
-    req.apiKeyId = result.apiKey.id;
-    req.apiKeyLabel = result.apiKey.label;
-    req.role = result.role;
-    req.hasApiKey = true;
+    const user = await getUser(tokenInfo.userId);
+
+    if (!user || !user.is_active) {
+      res.status(401).json({
+        jsonrpc: "2.0",
+        id: req.body?.id || null,
+        error: { code: -32001, message: "User account is deactivated" },
+      });
+      return;
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: {
+        id: user.role.id,
+        name: user.role.name,
+        allowed_tools: user.role.allowed_tools,
+      },
+    };
+
+    touchLastActive(user.id);
     next();
   } catch (err: any) {
-    // If database is not configured, allow through
-    console.error("[API Key Auth Error]", err.message);
-    req.hasApiKey = false;
-    next();
+    console.error("[OAuth Auth Error]", err.message);
+    res.status(500).json({
+      jsonrpc: "2.0",
+      id: req.body?.id || null,
+      error: { code: -32603, message: "Authentication error" },
+    });
   }
 }
 
 /**
  * Admin session authentication middleware.
- * Checks the admin_session cookie against the admin_sessions table.
+ * Checks the admin_session cookie against the mcp_admin_sessions table.
  */
 export async function adminAuth(
   req: Request,
@@ -129,8 +110,8 @@ export async function adminAuth(
   }
 
   try {
-    const session = await queryOne<{ id: string; expires_at: string }>(
-      `SELECT id, expires_at FROM mcp_admin_sessions WHERE id = $1 AND expires_at > NOW()`,
+    const session = await queryOne<{ id: string; user_id: string; expires_at: string }>(
+      `SELECT id, user_id, expires_at FROM mcp_admin_sessions WHERE id = $1 AND expires_at > NOW()`,
       [sessionId]
     );
 
@@ -148,15 +129,15 @@ export async function adminAuth(
 }
 
 /**
- * Create an admin session and return the session ID.
+ * Create an admin session tied to a user and return the session ID.
  */
-export async function createAdminSession(): Promise<string> {
+export async function createAdminSession(userId: string): Promise<string> {
   const sessionId = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 hours
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   await query(
-    `INSERT INTO mcp_admin_sessions (id, expires_at) VALUES ($1, $2)`,
-    [sessionId, expiresAt]
+    `INSERT INTO mcp_admin_sessions (id, user_id, expires_at) VALUES ($1, $2, $3)`,
+    [sessionId, userId, expiresAt]
   );
 
   return sessionId;
@@ -166,8 +147,5 @@ export async function createAdminSession(): Promise<string> {
  * Delete an admin session.
  */
 export async function deleteAdminSession(sessionId: string): Promise<void> {
-  await query(
-    `DELETE FROM mcp_admin_sessions WHERE id = $1`,
-    [sessionId]
-  );
+  await query(`DELETE FROM mcp_admin_sessions WHERE id = $1`, [sessionId]);
 }

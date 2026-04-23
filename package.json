@@ -7,15 +7,22 @@
     "build": "tsc",
     "start": "node api/index.js"
   },
-  "keywords": ["mcp", "tripleseat", "claude", "venues"],
+  "keywords": [
+    "mcp",
+    "tripleseat",
+    "claude",
+    "venues"
+  ],
   "author": "Stormbreaker Digital",
   "license": "MIT",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
     "express": "^4.21.0",
     "pg": "^8.13.1"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.7",
     "@types/express": "^5.0.0",
     "@types/node": "^22.0.0",

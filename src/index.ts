@@ -3,7 +3,7 @@
  *
  * Handles JSON-RPC directly instead of using the SDK transport.
  * Every request is self-contained — no sessions needed.
- * This is the correct pattern for stateless serverless (Vercel, Lambda, etc.)
+ * OAuth 2.1 Authorization Code + PKCE for MCP connector auth.
  */
 
 import express from "express";
@@ -16,15 +16,54 @@ import {
   storeTokens,
 } from "./auth.js";
 import { tripleseatGet } from "./tripleseat.js";
-import { apiKeyAuth } from "./middleware.js";
+import { oauthTokenAuth } from "./middleware.js";
 import { adminRouter } from "./admin/routes.js";
 import { logToolCall } from "./usage.js";
-import { validateOAuthClient } from "./api-keys.js";
+import { migrate } from "./db.js";
+import { seedDefaultRoles } from "./roles.js";
+import { seedAdminUser } from "./users.js";
+import { authenticateUser } from "./users.js";
+import {
+  getMetadata,
+  registerClient,
+  getClient,
+  createAuthCode,
+  exchangeCode,
+  refreshAccessToken,
+  validateToken,
+  renderLoginPage,
+  OAuthError,
+} from "./oauth.js";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// Run migrations on cold start
+let migrated = false;
+async function ensureMigrated(): Promise<void> {
+  if (migrated) return;
+  migrated = true;
+  try {
+    await migrate();
+    const { created } = await seedDefaultRoles();
+    if (created.length > 0) console.log("[Init] Seeded roles:", created.join(", "));
+
+    // Seed admin user from env vars if no admin exists yet
+    const { query: dbQuery } = await import("./db.js");
+    const adminRole = await dbQuery<{ id: string }>(
+      `SELECT id FROM mcp_roles WHERE name = 'admin' LIMIT 1`
+    );
+    if (adminRole.length > 0) {
+      const result = await seedAdminUser(adminRole[0].id);
+      if (result.created) console.log("[Init] Seeded admin user:", result.email);
+    }
+  } catch (err: any) {
+    console.error("[Init] Migration error:", err.message);
+    migrated = false;
+  }
+}
 
 // CORS
 app.use((req, res, next) => {
@@ -33,6 +72,12 @@ app.use((req, res, next) => {
   res.header("Access-Control-Allow-Headers", "Content-Type, Accept, Authorization, Mcp-Session-Id, Last-Event-ID");
   res.header("Access-Control-Expose-Headers", "Content-Type, Mcp-Session-Id");
   if (req.method === "OPTIONS") { res.sendStatus(204); return; }
+  next();
+});
+
+// Ensure DB is migrated before any route
+app.use(async (_req, _res, next) => {
+  await ensureMigrated();
   next();
 });
 
@@ -46,101 +91,199 @@ app.get("/", (_req, res) => {
       : "ready";
     res.json({
       name: "tripleseat-mcp",
-      version: "2.1.0",
+      version: "3.0.0",
       status,
       transport: "streamable-http",
       endpoint: "/mcp",
       admin: "/admin/login",
-      oauth_token_url: "/oauth/token",
+      auth: "oauth2-authorization-code",
       setup: status === "needs_oauth_setup" ? "/auth/login" : undefined,
-      env_check: {
-        has_db_url: !!process.env.DATABASE_URL,
-        has_admin_pw: !!process.env.ADMIN_PASSWORD,
-        has_client_id: !!process.env.TRIPLESEAT_CLIENT_ID,
-        has_refresh_token: !!process.env.TRIPLESEAT_REFRESH_TOKEN,
-      },
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message, stack: err.stack });
   }
 });
 
-// ── OAuth Token Endpoint (for Claude connectors) ──
-// Claude's custom connector sends client_id + client_secret here,
-// and we return a Bearer token that maps to the key's role.
-app.post("/oauth/token", async (req, res) => {
+// ── OAuth 2.1 Endpoints (MCP protocol auth) ──
+
+// Discovery metadata
+app.get("/.well-known/oauth-authorization-server", (req, res) => {
+  const protocol = req.headers["x-forwarded-proto"] || "https";
+  const host = req.headers.host || "tripleseat-mcp.vercel.app";
+  const issuer = protocol + "://" + host;
+  res.json(getMetadata(issuer));
+});
+
+// Dynamic client registration (RFC 7591)
+app.post("/oauth/register", async (req, res) => {
   try {
-    const grant_type = req.body.grant_type;
-
-    if (grant_type !== "client_credentials") {
-      console.log("[OAuth Token] Rejected grant_type:", grant_type, "| body keys:", Object.keys(req.body));
-      res.status(400).json({ error: "unsupported_grant_type", error_description: "Only client_credentials is supported" });
-      return;
-    }
-
-    // Extract credentials from body OR Basic auth header (RFC 6749 §2.3.1)
-    let client_id = req.body.client_id;
-    let client_secret = req.body.client_secret;
-
-    if ((!client_id || !client_secret) && req.headers.authorization?.startsWith("Basic ")) {
-      try {
-        const decoded = Buffer.from(req.headers.authorization.substring(6), "base64").toString("utf-8");
-        const colonIdx = decoded.indexOf(":");
-        if (colonIdx > 0) {
-          client_id = decodeURIComponent(decoded.substring(0, colonIdx));
-          client_secret = decodeURIComponent(decoded.substring(colonIdx + 1));
-        }
-      } catch (e) {
-        console.log("[OAuth Token] Failed to parse Basic auth header");
-      }
-    }
-
-    if (!client_id || !client_secret) {
-      console.log("[OAuth Token] Missing credentials. Body has client_id:", !!req.body.client_id, "| Has Basic header:", !!req.headers.authorization?.startsWith("Basic "));
-      res.status(400).json({ error: "invalid_request", error_description: "client_id and client_secret are required" });
-      return;
-    }
-
-    console.log("[OAuth Token] Validating client_id:", client_id.substring(0, 12) + "...");
-    const result = await validateOAuthClient(client_id, client_secret);
-
-    if (!result) {
-      console.log("[OAuth Token] Invalid credentials for client_id:", client_id.substring(0, 12) + "...");
-      res.status(401).json({ error: "invalid_client", error_description: "Invalid client credentials" });
-      return;
-    }
-
-    console.log("[OAuth Token] Authenticated key:", result.apiKey.id, "role:", result.role.name);
-    const accessToken = "oauth_" + result.apiKey.id + "_" + Date.now().toString(36);
-
-    // Store the OAuth token in the database for validation
-    const crypto = await import("node:crypto");
-    const tokenHash = crypto.createHash("sha256").update(accessToken).digest("hex");
-    const { query: dbQuery } = await import("./db.js");
-    await dbQuery(
-      `INSERT INTO mcp_admin_sessions (id, expires_at)
-       VALUES ($1, NOW() + INTERVAL '24 hours')`,
-      ["oauth:" + tokenHash + ":" + result.apiKey.id]
-    );
-
-    res.json({
-      access_token: accessToken,
-      token_type: "Bearer",
-      expires_in: 86400, // 24 hours
-      scope: result.role.allowed_tools.join(" "),
+    const { client_name, redirect_uris } = req.body;
+    const client = await registerClient(client_name, redirect_uris);
+    res.status(201).json({
+      client_id: client.client_id,
+      client_name: client.client_name,
+      redirect_uris: client.redirect_uris,
+      token_endpoint_auth_method: "none",
     });
   } catch (err: any) {
-    console.error("[OAuth Token Error]", err.message);
+    console.error("[OAuth Register Error]", err.message);
     res.status(500).json({ error: "server_error", error_description: err.message });
+  }
+});
+
+// Authorization endpoint — GET shows login page
+app.get("/oauth/authorize", (req, res) => {
+  const {
+    client_id,
+    redirect_uri,
+    code_challenge,
+    code_challenge_method,
+    state,
+    response_type,
+  } = req.query as Record<string, string>;
+
+  if (response_type !== "code") {
+    res.status(400).json({ error: "unsupported_response_type" });
+    return;
+  }
+
+  if (!client_id || !redirect_uri || !code_challenge || !state) {
+    res.status(400).json({
+      error: "invalid_request",
+      error_description: "client_id, redirect_uri, code_challenge, and state are required",
+    });
+    return;
+  }
+
+  res.type("html").send(
+    renderLoginPage({
+      clientId: client_id,
+      redirectUri: redirect_uri,
+      codeChallenge: code_challenge,
+      codeChallengeMethod: code_challenge_method || "S256",
+      state,
+    })
+  );
+});
+
+// Authorization endpoint — POST processes login
+app.post("/oauth/authorize", async (req, res) => {
+  const { client_id, redirect_uri, code_challenge, code_challenge_method, state, email, password } =
+    req.body;
+
+  if (!client_id || !redirect_uri || !code_challenge || !state || !email || !password) {
+    res.type("html").send(
+      renderLoginPage({
+        clientId: client_id || "",
+        redirectUri: redirect_uri || "",
+        codeChallenge: code_challenge || "",
+        codeChallengeMethod: code_challenge_method || "S256",
+        state: state || "",
+        error: "All fields are required.",
+      })
+    );
+    return;
+  }
+
+  try {
+    const user = await authenticateUser(email, password);
+
+    if (!user) {
+      res.type("html").send(
+        renderLoginPage({
+          clientId: client_id,
+          redirectUri: redirect_uri,
+          codeChallenge: code_challenge,
+          codeChallengeMethod: code_challenge_method || "S256",
+          state,
+          error: "Invalid email or password.",
+        })
+      );
+      return;
+    }
+
+    const code = await createAuthCode(
+      user.id,
+      client_id,
+      redirect_uri,
+      code_challenge,
+      code_challenge_method || "S256"
+    );
+
+    const redirectUrl = new URL(redirect_uri);
+    redirectUrl.searchParams.set("code", code);
+    redirectUrl.searchParams.set("state", state);
+
+    res.redirect(redirectUrl.toString());
+  } catch (err: any) {
+    console.error("[OAuth Authorize Error]", err.message);
+    res.type("html").send(
+      renderLoginPage({
+        clientId: client_id,
+        redirectUri: redirect_uri,
+        codeChallenge: code_challenge,
+        codeChallengeMethod: code_challenge_method || "S256",
+        state,
+        error: "An error occurred. Please try again.",
+      })
+    );
+  }
+});
+
+// Token endpoint — exchange code or refresh
+app.post("/oauth/token", async (req, res) => {
+  try {
+    const { grant_type } = req.body;
+
+    if (grant_type === "authorization_code") {
+      const { code, code_verifier, redirect_uri } = req.body;
+
+      if (!code || !code_verifier || !redirect_uri) {
+        res.status(400).json({
+          error: "invalid_request",
+          error_description: "code, code_verifier, and redirect_uri are required",
+        });
+        return;
+      }
+
+      const tokens = await exchangeCode(code, code_verifier, redirect_uri);
+      res.json(tokens);
+
+    } else if (grant_type === "refresh_token") {
+      const { refresh_token } = req.body;
+
+      if (!refresh_token) {
+        res.status(400).json({
+          error: "invalid_request",
+          error_description: "refresh_token is required",
+        });
+        return;
+      }
+
+      const tokens = await refreshAccessToken(refresh_token);
+      res.json(tokens);
+
+    } else {
+      res.status(400).json({
+        error: "unsupported_grant_type",
+        error_description: "Supported: authorization_code, refresh_token",
+      });
+    }
+  } catch (err: any) {
+    if (err instanceof OAuthError) {
+      res.status(400).json({ error: err.code, error_description: err.message });
+    } else {
+      console.error("[OAuth Token Error]", err.message);
+      res.status(500).json({ error: "server_error", error_description: err.message });
+    }
   }
 });
 
 // ── Admin Dashboard ──
 app.use("/admin", adminRouter);
 
-// ── OAuth Setup Routes (one-time) ──
+// ── TripleSeat OAuth Setup Routes (one-time) ──
 
-// Step 1: Redirect user to TripleSeat to authorize
 app.get("/auth/login", (req, res) => {
   const host = req.headers.host || "tripleseat-mcp.vercel.app";
   const protocol = req.headers["x-forwarded-proto"] || "https";
@@ -149,7 +292,6 @@ app.get("/auth/login", (req, res) => {
   res.redirect(authorizeUrl);
 });
 
-// Step 2: TripleSeat redirects back here with a code
 app.get("/auth/callback", async (req, res) => {
   const code = req.query.code as string;
   const error = req.query.error as string;
@@ -174,7 +316,6 @@ app.get("/auth/callback", async (req, res) => {
 
     const tokens = await exchangeCodeForTokens(code, redirectUri);
 
-    // Store tokens in the database for immediate use
     try {
       await storeTokens(tokens);
       console.log("[Auth Callback] Tokens stored in database successfully");
@@ -182,37 +323,25 @@ app.get("/auth/callback", async (req, res) => {
       console.error("[Auth Callback] Failed to store tokens in DB:", storeErr.message);
     }
 
-    // Show the token info
     res.send(`<!DOCTYPE html>
 <html><head><title>TripleSeat MCP - OAuth Setup Complete</title>
 <style>
-  body { font-family: -apple-system, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; }
-  .token-box { background: #f0f0f0; padding: 16px; border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 14px; margin: 12px 0; }
-  .success { color: #16a34a; }
-  .step { margin: 20px 0; padding: 16px; background: #f8f8f8; border-left: 4px solid #0057ff; }
-  h1 { color: #111; }
-  code { background: #e5e5e5; padding: 2px 6px; border-radius: 4px; }
+  body { font-family: -apple-system, sans-serif; max-width: 700px; margin: 40px auto; padding: 0 20px; background: #0a0a0a; color: #ededed; }
+  .success { color: #00c853; }
+  .token-box { background: #141414; border: 1px solid #262626; padding: 16px; border-radius: 8px; word-break: break-all; font-family: monospace; font-size: 14px; margin: 12px 0; }
+  .step { margin: 20px 0; padding: 16px; background: #141414; border-left: 4px solid #0070f3; border-radius: 4px; }
+  code { background: #262626; padding: 2px 6px; border-radius: 4px; }
+  a { color: #0070f3; }
 </style></head>
 <body>
   <h1 class="success">OAuth Setup Complete!</h1>
-  <p>TripleSeat authorized the Stormbreaker app. Here are your tokens:</p>
-
-  <h3>Refresh Token (save this):</h3>
+  <p>TripleSeat authorized the Stormbreaker app.</p>
+  <h3>Refresh Token:</h3>
   <div class="token-box">${tokens.refresh_token || "NOT PROVIDED"}</div>
-
-  <h3>Access Token (for testing, expires in ${tokens.expires_in || "?"}s):</h3>
-  <div class="token-box">${tokens.access_token}</div>
-
-  <h3>Scope:</h3>
-  <div class="token-box">${tokens.scope || "not specified"}</div>
-
-  <hr style="margin: 30px 0;">
-  <h2>Next Step: Add to Vercel</h2>
   <div class="step">
     <p><strong>1.</strong> Go to <a href="https://vercel.com/mcretzman-9359s-projects/tripleseat-mcp/settings/environment-variables" target="_blank">Vercel Environment Variables</a></p>
-    <p><strong>2.</strong> Add (or update) this variable:</p>
-    <p><code>TRIPLESEAT_REFRESH_TOKEN</code> = the refresh token above</p>
-    <p><strong>3.</strong> Redeploy the project (push a commit or click "Redeploy" in Vercel)</p>
+    <p><strong>2.</strong> Set <code>TRIPLESEAT_REFRESH_TOKEN</code> to the refresh token above</p>
+    <p><strong>3.</strong> Redeploy the project</p>
   </div>
 </body></html>`);
   } catch (err: any) {
@@ -406,9 +535,8 @@ const TOOLS = [
 ];
 
 // ── Response Size Management ──
-const MAX_RESPONSE_CHARS = 12000; // ~3k tokens — keeps responses well within context budget
+const MAX_RESPONSE_CHARS = 12000;
 
-// Fields to keep in list/search results (everything else stripped)
 const EVENT_SUMMARY_FIELDS = ["id", "name", "status", "event_start", "event_end", "location", "location_id", "room", "guest_count", "created_at"];
 const LEAD_SUMMARY_FIELDS = ["id", "first_name", "last_name", "email", "phone", "status", "location", "location_id", "event_date", "guest_count", "created_at", "lead_source"];
 const BOOKING_SUMMARY_FIELDS = ["id", "event_id", "status", "total", "balance_due", "created_at", "location", "location_id"];
@@ -627,16 +755,15 @@ async function handleMessage(msg: any, req: express.Request): Promise<any> {
       });
 
     case "notifications/initialized":
-      return null; // Notification — no response
+      return null;
 
     case "ping":
       return jsonrpcResponse(id, {});
 
     case "tools/list": {
       let tools = TOOLS;
-      // If request has an API key with role, filter tools to allowed_tools
-      if (req.hasApiKey && req.role?.allowed_tools) {
-        const allowed = new Set(req.role.allowed_tools);
+      if (req.user?.role?.allowed_tools) {
+        const allowed = new Set(req.user.role.allowed_tools);
         tools = TOOLS.filter((t) => allowed.has(t.name));
       }
       return jsonrpcResponse(id, { tools });
@@ -646,16 +773,14 @@ async function handleMessage(msg: any, req: express.Request): Promise<any> {
       const toolName = params?.name;
       const toolArgs = params?.arguments || {};
 
-      // Check tool access if API key is present
-      if (req.hasApiKey && req.role?.allowed_tools) {
-        if (!req.role.allowed_tools.includes(toolName)) {
-          return jsonrpcError(id, -32001, `Tool "${toolName}" is not allowed for your role "${req.role.name}"`);
+      if (req.user?.role?.allowed_tools) {
+        if (!req.user.role.allowed_tools.includes(toolName)) {
+          return jsonrpcError(id, -32001, `Tool "${toolName}" is not allowed for your role "${req.user.role.name}"`);
         }
       }
 
-      // Enforce no-financials for roles that don't have booking tools (i.e., coordinator)
-      // If a role doesn't include get_booking, they shouldn't see financial data anywhere.
-      if (req.hasApiKey && req.role?.allowed_tools && !req.role.allowed_tools.includes("get_booking")) {
+      // Strip financials for roles without booking access
+      if (req.user?.role?.allowed_tools && !req.user.role.allowed_tools.includes("get_booking")) {
         toolArgs.include_financials = false;
       }
 
@@ -664,8 +789,7 @@ async function handleMessage(msg: any, req: express.Request): Promise<any> {
         const result = await executeTool(toolName, toolArgs);
         const durationMs = Date.now() - startTime;
 
-        // Fire-and-forget usage logging
-        logToolCall(req.apiKeyId || null, toolName, toolArgs, true, undefined, durationMs);
+        logToolCall(req.user?.id || null, toolName, toolArgs, true, undefined, durationMs);
 
         return jsonrpcResponse(id, {
           content: [{ type: "text", text: result }],
@@ -673,8 +797,7 @@ async function handleMessage(msg: any, req: express.Request): Promise<any> {
       } catch (error: any) {
         const durationMs = Date.now() - startTime;
 
-        // Fire-and-forget usage logging
-        logToolCall(req.apiKeyId || null, toolName, toolArgs, false, error.message, durationMs);
+        logToolCall(req.user?.id || null, toolName, toolArgs, false, error.message, durationMs);
 
         return jsonrpcResponse(id, {
           content: [{ type: "text", text: `Error: ${error.message}` }],
@@ -689,11 +812,10 @@ async function handleMessage(msg: any, req: express.Request): Promise<any> {
 }
 
 // ── MCP Endpoint ──
-app.post("/mcp", apiKeyAuth, async (req, res) => {
+app.post("/mcp", oauthTokenAuth, async (req, res) => {
   try {
     const body = req.body;
 
-    // Handle batch requests
     if (Array.isArray(body)) {
       const results = await Promise.all(body.map((msg: any) => handleMessage(msg, req)));
       const responses = results.filter((r) => r !== null);
@@ -705,7 +827,6 @@ app.post("/mcp", apiKeyAuth, async (req, res) => {
       return;
     }
 
-    // Single request
     const result = await handleMessage(body, req);
     if (result === null) {
       res.status(202).end();
@@ -730,10 +851,11 @@ app.delete("/mcp", (_req, res) => {
 const PORT = process.env.PORT || 3000;
 if (process.env.VERCEL !== "1") {
   app.listen(PORT, () => {
-    console.log(`\n🔌 TripleSeat MCP Server running on http://localhost:${PORT}`);
-    console.log(`   MCP endpoint: http://localhost:${PORT}/mcp`);
-    console.log(`   Admin panel: http://localhost:${PORT}/admin/login`);
-    console.log(`   Credentials: ${hasCredentials() ? "✅ configured" : "❌ missing"}`);
+    console.log(`\nTripleSeat MCP Server running on http://localhost:${PORT}`);
+    console.log(`  MCP endpoint: http://localhost:${PORT}/mcp`);
+    console.log(`  Admin panel:  http://localhost:${PORT}/admin/login`);
+    console.log(`  OAuth:        http://localhost:${PORT}/.well-known/oauth-authorization-server`);
+    console.log(`  Credentials:  ${hasCredentials() ? "configured" : "missing"}`);
     console.log();
   });
 }

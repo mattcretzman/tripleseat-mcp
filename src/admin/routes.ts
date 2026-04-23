@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { adminAuth, createAdminSession, deleteAdminSession } from "../middleware.js";
-import { createApiKey, listKeys, revokeKey, updateKeyRole } from "../api-keys.js";
+import { authenticateUser, createUser, listUsers, updateUser, deactivateUser, resetPassword } from "../users.js";
 import { listRoles, createRole, updateRole, seedDefaultRoles } from "../roles.js";
 import { getRecentUsage, getUsageStats } from "../usage.js";
 import { loginPage, dashboardPage } from "./views.js";
@@ -18,35 +18,37 @@ router.get("/login", (_req: Request, res: Response) => {
 });
 
 router.post("/login", async (req: Request, res: Response) => {
-  const { password } = req.body;
-  const adminPassword = process.env.ADMIN_PASSWORD;
+  const { email, password } = req.body;
 
-  console.log("[admin/login] body keys:", Object.keys(req.body || {}));
-  console.log("[admin/login] password received:", typeof password, password ? `"${password.substring(0, 4)}..." (len=${password.length})` : "EMPTY");
-  console.log("[admin/login] ADMIN_PASSWORD env:", typeof adminPassword, adminPassword ? `"${adminPassword.substring(0, 4)}..." (len=${adminPassword.length})` : "NOT SET");
-
-  if (!adminPassword) {
-    res.type("html").send(loginPage("ADMIN_PASSWORD environment variable not set."));
-    return;
-  }
-
-  if (password !== adminPassword) {
-    res.type("html").send(loginPage("Invalid password."));
+  if (!email || !password) {
+    res.type("html").send(loginPage("Email and password are required."));
     return;
   }
 
   try {
-    const sessionId = await createAdminSession();
+    const user = await authenticateUser(email, password);
+
+    if (!user) {
+      res.type("html").send(loginPage("Invalid email or password."));
+      return;
+    }
+
+    if (!user.is_admin) {
+      res.type("html").send(loginPage("Admin access required."));
+      return;
+    }
+
+    const sessionId = await createAdminSession(user.id);
     res.cookie("admin_session", sessionId, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production" || process.env.VERCEL === "1",
       sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      maxAge: 24 * 60 * 60 * 1000,
       path: "/",
     });
     res.redirect("/admin/dashboard");
   } catch (err: any) {
-    res.type("html").send(loginPage("Session creation failed: " + err.message));
+    res.type("html").send(loginPage("Login failed: " + err.message));
   }
 });
 
@@ -55,9 +57,7 @@ router.post("/logout", async (req: Request, res: Response) => {
   if (sessionId) {
     try {
       await deleteAdminSession(sessionId);
-    } catch (_) {
-      // Ignore cleanup errors
-    }
+    } catch (_) {}
   }
   res.clearCookie("admin_session", { path: "/" });
   res.redirect("/admin/login");
@@ -70,57 +70,85 @@ router.use(adminAuth);
 // Dashboard
 router.get("/dashboard", async (_req: Request, res: Response) => {
   try {
-    const [keys, roles, stats] = await Promise.all([
-      listKeys(),
+    const [users, roles, stats] = await Promise.all([
+      listUsers(),
       listRoles(),
       getUsageStats(),
     ]);
 
     res.type("html").send(
-      dashboardPage({ keys, roles, stats })
+      dashboardPage({ users, roles, stats })
     );
   } catch (err: any) {
     res.status(500).send("Dashboard error: " + err.message);
   }
 });
 
-// ── API: Keys ──
+// ── API: Users ──
 
-router.get("/api/keys", async (_req: Request, res: Response) => {
+router.get("/api/users", async (_req: Request, res: Response) => {
   try {
-    const keys = await listKeys();
-    res.json(keys);
+    const users = await listUsers();
+    res.json(users);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post("/api/keys", async (req: Request, res: Response) => {
+router.post("/api/users", async (req: Request, res: Response) => {
   try {
-    const { label, role_id } = req.body;
-    if (!label || !role_id) {
-      res.status(400).json({ error: "label and role_id are required" });
+    const { email, name, password, role_id, is_admin } = req.body;
+    if (!email || !name || !password || !role_id) {
+      res.status(400).json({ error: "email, name, password, and role_id are required" });
       return;
     }
-    const result = await createApiKey(label, role_id, "admin");
-    res.json(result);
+    const user = await createUser(email, name, password, role_id, is_admin || false);
+    res.json({ id: user.id, email: user.email, name: user.name, role_id: user.role_id, is_admin: user.is_admin });
+  } catch (err: any) {
+    if (err.message?.includes("duplicate key") || err.message?.includes("unique")) {
+      res.status(409).json({ error: "A user with that email already exists" });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  }
+});
+
+router.patch("/api/users/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const updates: any = {};
+    if (req.body.name !== undefined) updates.name = req.body.name;
+    if (req.body.email !== undefined) updates.email = req.body.email;
+    if (req.body.role_id !== undefined) updates.role_id = req.body.role_id;
+    if (req.body.is_admin !== undefined) updates.is_admin = req.body.is_admin;
+    if (req.body.is_active !== undefined) updates.is_active = req.body.is_active;
+
+    const user = await updateUser(id as string, updates);
+    res.json(user);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.patch("/api/keys/:id", async (req: Request, res: Response) => {
+router.post("/api/users/:id/reset-password", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { is_active, role_id } = req.body;
-
-    if (is_active === false) {
-      await revokeKey(id as string);
+    const { password } = req.body;
+    if (!password) {
+      res.status(400).json({ error: "password is required" });
+      return;
     }
-    if (role_id) {
-      await updateKeyRole(id as string, role_id);
-    }
+    await resetPassword(id as string, password);
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
+router.post("/api/users/:id/deactivate", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await deactivateUser(id as string);
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -174,7 +202,7 @@ router.get("/api/usage", async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const filters: any = {};
     if (req.query.days) filters.days = parseInt(req.query.days as string);
-    if (req.query.key_id) filters.key_id = req.query.key_id;
+    if (req.query.user_id) filters.user_id = req.query.user_id;
     if (req.query.tool_name) filters.tool_name = req.query.tool_name;
 
     const usage = await getRecentUsage(limit, filters);

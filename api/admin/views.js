@@ -47,539 +47,242 @@ const CSS = `
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
-  /* Layout */
   .login-wrapper {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 20px;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 20px;
   }
 
   .login-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 40px;
-    width: 100%;
-    max-width: 400px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 40px; width: 100%; max-width: 400px;
     box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
   }
 
-  .login-card h1 {
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 4px;
-  }
+  .login-card h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
 
   .login-card .subtitle {
-    color: var(--text-secondary);
-    font-size: 13px;
-    margin-bottom: 28px;
+    color: var(--text-secondary); font-size: 13px; margin-bottom: 28px;
   }
 
   .login-card label {
-    display: block;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    margin-bottom: 6px;
+    display: block; font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); margin-bottom: 6px;
   }
 
+  .login-card input[type="email"],
   .login-card input[type="password"] {
-    width: 100%;
-    padding: 10px 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-size: 14px;
-    font-family: var(--font);
-    outline: none;
-    transition: border-color 0.15s;
+    width: 100%; padding: 10px 12px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: 14px; font-family: var(--font);
+    outline: none; transition: border-color 0.15s; margin-bottom: 16px;
   }
 
-  .login-card input[type="password"]:focus {
-    border-color: var(--accent);
-  }
+  .login-card input:focus { border-color: var(--accent); }
 
   .login-error {
-    background: var(--danger-subtle);
-    color: var(--danger);
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
-    margin-bottom: 16px;
+    background: var(--danger-subtle); color: var(--danger);
+    padding: 10px 12px; border-radius: var(--radius-sm);
+    font-size: 13px; margin-bottom: 16px;
     border: 1px solid rgba(255, 68, 68, 0.2);
   }
 
-  /* Buttons */
   .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 500;
-    font-family: var(--font);
-    border-radius: var(--radius-sm);
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: all 0.15s;
-    white-space: nowrap;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 8px 16px; font-size: 13px; font-weight: 500; font-family: var(--font);
+    border-radius: var(--radius-sm); border: 1px solid transparent;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
   }
 
-  .btn-primary {
-    background: var(--accent);
-    color: white;
-    border-color: var(--accent);
-  }
+  .btn-primary { background: var(--accent); color: white; border-color: var(--accent); }
   .btn-primary:hover { background: var(--accent-hover); }
 
-  .btn-secondary {
-    background: transparent;
-    color: var(--text);
-    border-color: var(--border);
-  }
+  .btn-secondary { background: transparent; color: var(--text); border-color: var(--border); }
   .btn-secondary:hover { background: var(--surface-hover); border-color: var(--border-light); }
 
-  .btn-danger {
-    background: transparent;
-    color: var(--danger);
-    border-color: rgba(255, 68, 68, 0.3);
-  }
+  .btn-danger { background: transparent; color: var(--danger); border-color: rgba(255, 68, 68, 0.3); }
   .btn-danger:hover { background: var(--danger-subtle); }
 
   .btn-sm { padding: 5px 10px; font-size: 12px; }
+  .btn-full { width: 100%; margin-top: 4px; padding: 10px 16px; }
 
-  .btn-full { width: 100%; margin-top: 20px; padding: 10px 16px; }
-
-  /* Shell */
-  .shell {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
+  .shell { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
 
   .header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 24px;
   }
 
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
 
-  .header h1 {
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
 
   .header .badge {
-    font-size: 11px;
-    padding: 2px 8px;
-    background: var(--accent-subtle);
-    color: var(--accent);
-    border-radius: 100px;
-    font-weight: 500;
+    font-size: 11px; padding: 2px 8px; background: var(--accent-subtle);
+    color: var(--accent); border-radius: 100px; font-weight: 500;
   }
 
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .header-right .status { font-size: 12px; color: var(--text-secondary); }
 
-  .header-right .status {
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-
-  /* Stats Bar */
-  .stats-bar {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 24px;
-  }
+  .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
 
   .stat-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
   }
 
-  .stat-card .stat-label {
-    font-size: 12px;
-    color: var(--text-secondary);
-    font-weight: 500;
-    margin-bottom: 6px;
-  }
+  .stat-card .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-bottom: 6px; }
+  .stat-card .stat-value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+  .stat-card .stat-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 4px; }
 
-  .stat-card .stat-value {
-    font-size: 24px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-  }
-
-  .stat-card .stat-sub {
-    font-size: 11px;
-    color: var(--text-tertiary);
-    margin-top: 4px;
-  }
-
-  /* Tabs */
-  .tabs {
-    display: flex;
-    gap: 0;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
-  }
+  .tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
 
   .tab {
-    padding: 10px 20px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: all 0.15s;
-    background: none;
-    border-top: none;
-    border-left: none;
-    border-right: none;
+    padding: 10px 20px; font-size: 13px; font-weight: 500;
+    color: var(--text-secondary); cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s;
+    background: none; border-top: none; border-left: none; border-right: none;
     font-family: var(--font);
   }
 
   .tab:hover { color: var(--text); }
-
-  .tab.active {
-    color: var(--text);
-    border-bottom-color: var(--accent);
-  }
+  .tab.active { color: var(--text); border-bottom-color: var(--accent); }
 
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
-  /* Tables */
   .table-wrap {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
   }
 
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
+  table { width: 100%; border-collapse: collapse; }
 
   th {
-    text-align: left;
-    padding: 10px 16px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
+    text-align: left; padding: 10px 16px; font-size: 12px; font-weight: 500;
+    color: var(--text-secondary); background: var(--surface);
+    border-bottom: 1px solid var(--border); white-space: nowrap;
   }
 
   td {
-    padding: 12px 16px;
-    font-size: 13px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
+    padding: 12px 16px; font-size: 13px;
+    border-bottom: 1px solid var(--border); vertical-align: middle;
   }
 
   tr:last-child td { border-bottom: none; }
-
   tr:hover td { background: var(--surface-hover); }
 
-  .mono {
-    font-family: var(--mono);
-    font-size: 12px;
-  }
+  .mono { font-family: var(--mono); font-size: 12px; }
 
-  /* Status badge */
   .status-active {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--success);
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 500; color: var(--success);
   }
-
   .status-active::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--success);
+    content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--success);
   }
 
   .status-inactive {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-tertiary);
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 500; color: var(--text-tertiary);
   }
-
   .status-inactive::before {
-    content: '';
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--text-tertiary);
+    content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--text-tertiary);
   }
 
-  /* Forms */
   .inline-form {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 20px;
-    margin-bottom: 16px;
-    display: none;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px; display: none;
   }
-
   .inline-form.visible { display: block; }
 
-  .form-row {
-    display: flex;
-    gap: 12px;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
+  .form-row { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    flex: 1;
-    min-width: 200px;
-  }
-
-  .form-group label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
+  .form-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 200px; }
+  .form-group label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
 
   .form-group input,
   .form-group select {
-    padding: 8px 10px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text);
-    font-size: 13px;
-    font-family: var(--font);
-    outline: none;
-    transition: border-color 0.15s;
+    padding: 8px 10px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text); font-size: 13px;
+    font-family: var(--font); outline: none; transition: border-color 0.15s;
   }
 
-  .form-group input:focus,
-  .form-group select:focus {
-    border-color: var(--accent);
-  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--accent); }
 
-  /* Key reveal box */
-  .key-reveal {
-    background: var(--accent-subtle);
-    border: 1px solid rgba(0, 112, 243, 0.3);
-    border-radius: var(--radius);
-    padding: 16px;
-    margin-top: 12px;
-    display: none;
-  }
-
-  .key-reveal.visible { display: block; }
-
-  .key-reveal .key-text {
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--accent);
-    background: var(--bg);
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
-    margin: 8px 0;
-    word-break: break-all;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .key-reveal .key-warning {
-    font-size: 12px;
-    color: var(--warning);
-    font-weight: 500;
-    margin-top: 8px;
-  }
-
-  /* Tool chips */
   .tool-chip {
-    display: inline-block;
-    padding: 2px 8px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 100px;
-    font-size: 11px;
-    font-family: var(--mono);
-    color: var(--text-secondary);
-    margin: 2px 2px;
+    display: inline-block; padding: 2px 8px; background: var(--bg);
+    border: 1px solid var(--border); border-radius: 100px;
+    font-size: 11px; font-family: var(--mono); color: var(--text-secondary); margin: 2px 2px;
   }
 
-  .tool-count {
-    font-size: 12px;
-    color: var(--text-secondary);
-    cursor: pointer;
-  }
-
+  .tool-count { font-size: 12px; color: var(--text-secondary); cursor: pointer; }
   .tool-count:hover { color: var(--accent); }
 
-  /* Tool checkboxes */
   .tools-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 6px;
-    padding: 12px 16px;
-    background: var(--bg);
-    border-radius: var(--radius-sm);
-    margin-top: 8px;
-    display: none;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 6px; padding: 12px 16px; background: var(--bg);
+    border-radius: var(--radius-sm); margin-top: 8px; display: none;
   }
-
   .tools-grid.visible { display: grid; }
 
   .tools-grid label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    font-family: var(--mono);
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 4px;
-    border-radius: 4px;
+    display: flex; align-items: center; gap: 6px; font-size: 12px;
+    font-family: var(--mono); color: var(--text-secondary);
+    cursor: pointer; padding: 4px; border-radius: 4px;
   }
-
   .tools-grid label:hover { background: var(--surface); }
+  .tools-grid input[type="checkbox"] { accent-color: var(--accent); }
 
-  .tools-grid input[type="checkbox"] {
-    accent-color: var(--accent);
-  }
+  .filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: flex-end; }
+  .filters .form-group { min-width: 150px; flex: 0 1 auto; }
 
-  /* Filters */
-  .filters {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-    align-items: flex-end;
-  }
-
-  .filters .form-group {
-    min-width: 150px;
-    flex: 0 1 auto;
-  }
-
-  /* Status indicators in activity */
   .status-ok { color: var(--success); }
   .status-err { color: var(--danger); }
 
-  /* Empty state */
-  .empty-state {
-    text-align: center;
-    padding: 48px 20px;
-    color: var(--text-secondary);
-  }
+  .empty-state { text-align: center; padding: 48px 20px; color: var(--text-secondary); }
 
-  .empty-state .empty-icon {
-    font-size: 32px;
-    margin-bottom: 12px;
-    opacity: 0.3;
-  }
+  .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .toolbar h2 { font-size: 15px; font-weight: 600; }
 
-  /* Toolbar */
-  .toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-  }
-
-  .toolbar h2 {
-    font-size: 15px;
-    font-weight: 600;
-  }
-
-  /* Role select inline */
   .role-select-inline {
-    padding: 4px 6px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: var(--font);
-    outline: none;
-    cursor: pointer;
+    padding: 4px 6px; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text); font-size: 12px;
+    font-family: var(--font); outline: none; cursor: pointer;
   }
-
   .role-select-inline:focus { border-color: var(--accent); }
 
-  /* Confirm dialog */
   .confirm-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 100;
-    backdrop-filter: blur(4px);
+    position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; backdrop-filter: blur(4px);
   }
 
   .confirm-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 24px;
-    max-width: 400px;
-    width: 90%;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; max-width: 400px; width: 90%;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 
   .confirm-box h3 { font-size: 15px; margin-bottom: 8px; }
   .confirm-box p { font-size: 13px; color: var(--text-secondary); margin-bottom: 20px; }
 
-  .confirm-actions {
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
+  .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+  .table-scroll { overflow-x: auto; }
+
+  .admin-badge {
+    display: inline-block; padding: 1px 6px; background: var(--accent-subtle);
+    color: var(--accent); border-radius: 4px; font-size: 10px; font-weight: 600;
+    margin-left: 6px; vertical-align: middle;
   }
 
-  /* Scrollable */
-  .table-scroll {
-    overflow-x: auto;
+  .checkbox-row {
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
   }
+  .checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
+  .checkbox-row label { font-size: 13px; color: var(--text-secondary); cursor: pointer; }
 
-  /* Responsive */
   @media (max-width: 768px) {
     .stats-bar { grid-template-columns: repeat(2, 1fr); }
     .form-row { flex-direction: column; }
@@ -587,20 +290,11 @@ const CSS = `
     .filters { flex-direction: column; }
   }
 
-  /* Toast */
   .toast {
-    position: fixed;
-    bottom: 24px;
-    right: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 12px 20px;
-    font-size: 13px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-    z-index: 200;
-    animation: slideUp 0.2s ease-out;
-    max-width: 400px;
+    position: fixed; bottom: 24px; right: 24px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 12px 20px; font-size: 13px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    z-index: 200; animation: slideUp 0.2s ease-out; max-width: 400px;
   }
 
   .toast.success { border-color: rgba(0, 200, 83, 0.3); color: var(--success); }
@@ -628,8 +322,10 @@ function loginPage(error) {
       <p class="subtitle">TripleSeat MCP Server Management</p>
       ${error ? `<div class="login-error">${error}</div>` : ""}
       <form method="POST" action="/admin/login">
-        <label for="password">Admin Password</label>
-        <input type="password" id="password" name="password" placeholder="Enter admin password" autofocus required>
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="admin@example.com" autofocus required>
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" placeholder="Enter your password" required>
         <button type="submit" class="btn btn-primary btn-full">Sign In</button>
       </form>
     </div>
@@ -641,13 +337,13 @@ function dashboardPage(data) {
     const topTool = data.stats.top_tools.length > 0
         ? data.stats.top_tools[0].tool_name
         : "None yet";
-    const activeKeyCount = data.keys.filter((k) => k.is_active).length;
+    const activeUserCount = data.users.filter((u) => u.is_active).length;
     const toolOptions = roles_js_1.ALL_TOOLS.map((t) => `<option value="${t}">${t}</option>`).join("");
     const roleOptions = data.roles
         .map((r) => `<option value="${r.id}">${r.name}</option>`)
         .join("");
-    const keyLabelOptions = data.keys
-        .map((k) => `<option value="${k.id}">${k.label}</option>`)
+    const userOptions = data.users
+        .map((u) => `<option value="${u.id}">${u.name}</option>`)
         .join("");
     const toolCheckboxes = roles_js_1.ALL_TOOLS.map((t) => `<label><input type="checkbox" value="${t}"> ${t}</label>`).join("\n");
     return `<!DOCTYPE html>
@@ -677,85 +373,66 @@ function dashboardPage(data) {
     <!-- Stats Bar -->
     <div class="stats-bar">
       <div class="stat-card">
-        <div class="stat-label">Active Keys</div>
-        <div class="stat-value" id="stat-keys">${activeKeyCount}</div>
-        <div class="stat-sub">${data.keys.length} total</div>
+        <div class="stat-label">Active Users</div>
+        <div class="stat-value">${activeUserCount}</div>
+        <div class="stat-sub">${data.users.length} total</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">API Calls Today</div>
-        <div class="stat-value" id="stat-today">${data.stats.calls_today}</div>
+        <div class="stat-value">${data.stats.calls_today}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">API Calls This Week</div>
-        <div class="stat-value" id="stat-week">${data.stats.calls_this_week}</div>
+        <div class="stat-value">${data.stats.calls_this_week}</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Most Used Tool</div>
-        <div class="stat-value" style="font-size: 16px; font-family: var(--mono);" id="stat-top-tool">${topTool}</div>
+        <div class="stat-value" style="font-size: 16px; font-family: var(--mono);">${topTool}</div>
       </div>
     </div>
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" data-tab="keys">Keys</button>
+      <button class="tab active" data-tab="users">Users</button>
       <button class="tab" data-tab="roles">Roles</button>
       <button class="tab" data-tab="activity">Activity</button>
     </div>
 
-    <!-- Keys Tab -->
-    <div class="tab-content active" id="tab-keys">
+    <!-- Users Tab -->
+    <div class="tab-content active" id="tab-users">
       <div class="toolbar">
-        <h2>API Keys</h2>
-        <button class="btn btn-primary btn-sm" onclick="toggleForm('create-key-form')">Create New Key</button>
+        <h2>Users</h2>
+        <button class="btn btn-primary btn-sm" onclick="toggleForm('create-user-form')">Create User</button>
       </div>
 
-      <div class="inline-form" id="create-key-form">
-        <div id="create-key-inputs">
-          <div class="form-row">
-            <div class="form-group">
-              <label>Label</label>
-              <input type="text" id="new-key-label" placeholder="e.g. Brian - Admin">
-            </div>
-            <div class="form-group">
-              <label>Role</label>
-              <select id="new-key-role">${roleOptions}</select>
-            </div>
-            <div style="display:flex;gap:8px;padding-bottom:1px">
-              <button class="btn btn-primary btn-sm" id="create-key-btn" onclick="createKey()">Create</button>
-              <button class="btn btn-secondary btn-sm" onclick="closeCreateKey()">Cancel</button>
-            </div>
+      <div class="inline-form" id="create-user-form">
+        <div class="form-row" style="margin-bottom: 12px">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="new-user-name" placeholder="Brian Smith">
+          </div>
+          <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="new-user-email" placeholder="brian@example.com">
           </div>
         </div>
-        <div class="key-reveal" id="new-key-reveal">
-          <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px">
-            <span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:4px">Server URL</span>
-            <span style="font-family:var(--mono);font-size:13px;color:var(--text)">https://tripleseat-mcp.vercel.app/mcp</span>
+        <div class="form-row" style="margin-bottom: 12px">
+          <div class="form-group">
+            <label>Password</label>
+            <input type="password" id="new-user-password" placeholder="Temporary password">
           </div>
-
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px">For Claude Desktop (Bearer token):</div>
-          <div class="key-text">
-            <span id="new-key-value"></span>
-            <button class="btn btn-secondary btn-sm" onclick="copyKey()">Copy</button>
+          <div class="form-group">
+            <label>Role</label>
+            <select id="new-user-role">${roleOptions}</select>
           </div>
-
-          <div style="border-top:1px solid var(--border);margin:16px 0"></div>
-
-          <div style="font-size:13px;font-weight:500;margin-bottom:8px">For Claude.ai Connector (OAuth):</div>
-          <div style="display:grid;gap:8px">
-            <div class="key-text" style="flex-direction:column;align-items:flex-start;gap:4px">
-              <span style="font-size:11px;color:var(--text-secondary)">Client ID</span>
-              <span id="new-key-client-id" style="word-break:break-all"></span>
-            </div>
-            <div class="key-text" style="flex-direction:column;align-items:flex-start;gap:4px">
-              <span style="font-size:11px;color:var(--text-secondary)">Client Secret</span>
-              <span id="new-key-client-secret" style="word-break:break-all"></span>
-            </div>
-            <button class="btn btn-secondary btn-sm" onclick="copyOAuth()" style="width:fit-content">Copy Both</button>
-          </div>
-          <div class="key-warning" style="margin-top:12px">Secrets are only shown once. The Server URL and Client ID can be viewed later from the keys table.</div>
-          <div style="margin-top:16px;display:flex;justify-content:flex-end">
-            <button class="btn btn-primary btn-sm" onclick="closeCreateKey()">Done</button>
-          </div>
+        </div>
+        <div class="checkbox-row" style="margin-bottom: 16px">
+          <input type="checkbox" id="new-user-admin">
+          <label for="new-user-admin">Admin access (can manage users and roles)</label>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" id="create-user-btn" onclick="createUser()">Create User</button>
+          <button class="btn btn-secondary btn-sm" onclick="toggleForm('create-user-form')">Cancel</button>
         </div>
       </div>
 
@@ -764,16 +441,15 @@ function dashboardPage(data) {
           <table>
             <thead>
               <tr>
-                <th>Label</th>
-                <th>Key</th>
+                <th>Name</th>
+                <th>Email</th>
                 <th>Role</th>
                 <th>Status</th>
-                <th>Last Used</th>
-                <th>Created</th>
+                <th>Last Active</th>
                 <th>Actions</th>
               </tr>
             </thead>
-            <tbody id="keys-table-body">
+            <tbody id="users-table-body">
             </tbody>
           </table>
         </div>
@@ -851,7 +527,7 @@ function dashboardPage(data) {
           <label>User</label>
           <select id="activity-user" onchange="loadActivity()">
             <option value="">All users</option>
-            ${keyLabelOptions}
+            ${userOptions}
           </select>
         </div>
         <div class="form-group">
@@ -883,12 +559,10 @@ function dashboardPage(data) {
     </div>
   </div>
 
-  <!-- Toast container -->
   <div id="toast-container"></div>
 
   <script>
-    // ── State ──
-    let keysData = ${JSON.stringify(data.keys)};
+    let usersData = ${JSON.stringify(data.users)};
     let rolesData = ${JSON.stringify(data.roles)};
     const allTools = ${JSON.stringify([...roles_js_1.ALL_TOOLS])};
 
@@ -913,8 +587,7 @@ function dashboardPage(data) {
     }
 
     function toggleForm(id) {
-      const form = document.getElementById(id);
-      form.classList.toggle('visible');
+      document.getElementById(id).classList.toggle('visible');
     }
 
     function timeAgo(dateStr) {
@@ -948,164 +621,146 @@ function dashboardPage(data) {
       return res.json();
     }
 
-    // ── Keys ──
-    function renderKeys() {
-      const tbody = document.getElementById('keys-table-body');
-      if (keysData.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No API keys yet. Create one to get started.</div></td></tr>';
-        return;
-      }
-
-      const roleOptHtml = rolesData.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
-
-      tbody.innerHTML = keysData.map(k => {
-        const statusClass = k.is_active ? 'status-active' : 'status-inactive';
-        const statusText = k.is_active ? 'Active' : 'Inactive';
-        const roleName = k.role ? k.role.name : 'Unknown';
-
-        return '<tr data-key-id="' + k.id + '">' +
-          '<td><strong>' + esc(k.label) + '</strong></td>' +
-          '<td><span class="mono">' + esc(k.key_prefix) + '...</span></td>' +
-          '<td><select class="role-select-inline" onchange="changeKeyRole(\\'' + k.id + '\\', this.value)" ' + (!k.is_active ? 'disabled' : '') + '>' +
-            rolesData.map(r => '<option value="' + r.id + '"' + (r.id === k.role_id ? ' selected' : '') + '>' + r.name + '</option>').join('') +
-          '</select></td>' +
-          '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
-          '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(k.last_used_at) + '</td>' +
-          '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(k.created_at) + '</td>' +
-          '<td style="display:flex;gap:6px">' +
-            (k.is_active
-              ? '<button class="btn btn-secondary btn-sm" onclick="showKeyInfo(\\'' + k.id + '\\')">Info</button>' +
-                '<button class="btn btn-danger btn-sm" onclick="revokeKey(\\'' + k.id + '\\', \\'' + esc(k.label) + '\\')">Revoke</button>'
-              : '<span style="color:var(--text-tertiary);font-size:12px">Revoked</span>') +
-          '</td>' +
-        '</tr>';
-      }).join('');
-    }
-
     function esc(s) {
       if (!s) return '';
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
-    async function createKey() {
-      const label = document.getElementById('new-key-label').value.trim();
-      const roleId = document.getElementById('new-key-role').value;
-      if (!label) { toast('Label is required', 'error'); return; }
+    // ── Users ──
+    function renderUsers() {
+      const tbody = document.getElementById('users-table-body');
+      if (usersData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No users yet. Create one to get started.</div></td></tr>';
+        return;
+      }
 
-      const btn = document.getElementById('create-key-btn');
+      tbody.innerHTML = usersData.map(u => {
+        const statusClass = u.is_active ? 'status-active' : 'status-inactive';
+        const statusText = u.is_active ? 'Active' : 'Inactive';
+        const roleName = u.role ? u.role.name : 'None';
+        const adminBadge = u.is_admin ? '<span class="admin-badge">ADMIN</span>' : '';
+
+        return '<tr>' +
+          '<td><strong>' + esc(u.name) + '</strong>' + adminBadge + '</td>' +
+          '<td style="color:var(--text-secondary)">' + esc(u.email) + '</td>' +
+          '<td><select class="role-select-inline" onchange="changeUserRole(\\'' + u.id + '\\', this.value)" ' + (!u.is_active ? 'disabled' : '') + '>' +
+            rolesData.map(r => '<option value="' + r.id + '"' + (r.id === u.role_id ? ' selected' : '') + '>' + r.name + '</option>').join('') +
+          '</select></td>' +
+          '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
+          '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(u.last_active_at) + '</td>' +
+          '<td style="display:flex;gap:6px">' +
+            (u.is_active
+              ? '<button class="btn btn-secondary btn-sm" onclick="showResetPassword(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Reset PW</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="deactivateUser(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Deactivate</button>'
+              : '<button class="btn btn-secondary btn-sm" onclick="reactivateUser(\\'' + u.id + '\\')">Reactivate</button>') +
+          '</td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    async function createUser() {
+      const name = document.getElementById('new-user-name').value.trim();
+      const email = document.getElementById('new-user-email').value.trim();
+      const password = document.getElementById('new-user-password').value;
+      const roleId = document.getElementById('new-user-role').value;
+      const isAdmin = document.getElementById('new-user-admin').checked;
+
+      if (!name || !email || !password) { toast('All fields are required', 'error'); return; }
+
+      const btn = document.getElementById('create-user-btn');
       btn.disabled = true;
       btn.textContent = 'Creating...';
 
       try {
-        const result = await api('/admin/api/keys', {
+        await api('/admin/api/users', {
           method: 'POST',
-          body: JSON.stringify({ label, role_id: roleId }),
+          body: JSON.stringify({ name, email, password, role_id: roleId, is_admin: isAdmin }),
         });
 
-        document.getElementById('new-key-value').textContent = result.key;
-        document.getElementById('new-key-client-id').textContent = result.client_id || '';
-        document.getElementById('new-key-client-secret').textContent = result.client_secret || '';
-
-        // Hide the input form, show the credentials
-        document.getElementById('create-key-inputs').style.display = 'none';
-        document.getElementById('new-key-reveal').classList.add('visible');
-
-        // Refresh keys
-        keysData = await api('/admin/api/keys');
-        renderKeys();
-        // Update role select for next key creation
-        const roleSelect = document.getElementById('new-key-role');
-        roleSelect.innerHTML = rolesData.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
-        toast('Key created for ' + label);
+        usersData = await api('/admin/api/users');
+        renderUsers();
+        toggleForm('create-user-form');
+        document.getElementById('new-user-name').value = '';
+        document.getElementById('new-user-email').value = '';
+        document.getElementById('new-user-password').value = '';
+        document.getElementById('new-user-admin').checked = false;
+        toast('User created: ' + name);
       } catch (e) {
-        toast('Failed to create key: ' + e.message, 'error');
+        toast('Failed: ' + e.message, 'error');
+      } finally {
         btn.disabled = false;
-        btn.textContent = 'Create';
+        btn.textContent = 'Create User';
       }
     }
 
-    function closeCreateKey() {
-      // Reset everything
-      document.getElementById('create-key-form').classList.remove('visible');
-      document.getElementById('create-key-inputs').style.display = '';
-      document.getElementById('new-key-reveal').classList.remove('visible');
-      document.getElementById('new-key-label').value = '';
-      const btn = document.getElementById('create-key-btn');
-      btn.disabled = false;
-      btn.textContent = 'Create';
-    }
-
-    function copyKey() {
-      const key = document.getElementById('new-key-value').textContent;
-      navigator.clipboard.writeText(key).then(() => toast('Copied to clipboard'));
-    }
-
-    function copyOAuth() {
-      const clientId = document.getElementById('new-key-client-id').textContent;
-      const clientSecret = document.getElementById('new-key-client-secret').textContent;
-      navigator.clipboard.writeText('Client ID: ' + clientId + '\\nClient Secret: ' + clientSecret)
-        .then(() => toast('OAuth credentials copied'));
-    }
-
-    function showKeyInfo(keyId) {
-      const k = keysData.find(x => x.id === keyId);
-      if (!k) return;
-
-      const html = '<div class="confirm-overlay" id="key-info-overlay">' +
-        '<div class="confirm-box" style="max-width:550px">' +
-        '<h3>Connection Info: ' + esc(k.label) + '</h3>' +
-        '<p style="margin-bottom:16px">Share these details with the user. Secrets are not stored and cannot be retrieved.</p>' +
-        '<div style="display:grid;gap:10px">' +
-          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
-            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">Server URL</span>' +
-            '<span style="font-family:var(--mono);font-size:12px">https://tripleseat-mcp.vercel.app/mcp</span>' +
-          '</div>' +
-          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
-            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">Key Prefix</span>' +
-            '<span style="font-family:var(--mono);font-size:12px">' + esc(k.key_prefix) + '...</span>' +
-          '</div>' +
-          (k.client_id ? '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
-            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">OAuth Client ID</span>' +
-            '<span style="font-family:var(--mono);font-size:12px">' + esc(k.client_id) + '</span>' +
-          '</div>' : '') +
-          '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px">' +
-            '<span style="font-size:11px;color:var(--text-secondary);display:block;margin-bottom:2px">Role</span>' +
-            '<span style="font-size:12px">' + esc(k.role ? k.role.name : 'unknown') + '</span>' +
-          '</div>' +
-          '<p style="font-size:12px;color:var(--warning);margin-top:4px">Bearer token and Client Secret were shown once at creation and cannot be retrieved. Create a new key if needed.</p>' +
-        '</div>' +
-        '<div class="confirm-actions" style="margin-top:16px">' +
-          (k.client_id ? '<button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText(\\'' + esc(k.client_id) + '\\').then(()=>toast(\\'Client ID copied\\'))">Copy Client ID</button>' : '') +
-          '<button class="btn btn-primary btn-sm" onclick="document.getElementById(\\'key-info-overlay\\').remove()">Close</button>' +
-        '</div></div></div>';
-
-      document.body.insertAdjacentHTML('beforeend', html);
-    }
-
-    async function changeKeyRole(keyId, newRoleId) {
+    async function changeUserRole(userId, newRoleId) {
       try {
-        await api('/admin/api/keys/' + keyId, {
+        await api('/admin/api/users/' + userId, {
           method: 'PATCH',
           body: JSON.stringify({ role_id: newRoleId }),
         });
-        const k = keysData.find(k => k.id === keyId);
-        if (k) k.role_id = newRoleId;
+        const u = usersData.find(u => u.id === userId);
+        if (u) u.role_id = newRoleId;
         toast('Role updated');
       } catch (e) {
         toast('Failed: ' + e.message, 'error');
       }
     }
 
-    async function revokeKey(keyId, label) {
-      if (!confirm('Revoke key "' + label + '"? This cannot be undone.')) return;
+    function showResetPassword(userId, name) {
+      const html = '<div class="confirm-overlay" id="reset-pw-overlay">' +
+        '<div class="confirm-box">' +
+        '<h3>Reset Password: ' + esc(name) + '</h3>' +
+        '<p>Enter a new password for this user. Share it with them directly.</p>' +
+        '<div class="form-group" style="margin-bottom:16px">' +
+          '<input type="password" id="reset-pw-input" placeholder="New password" style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-size:13px;font-family:var(--font);outline:none">' +
+        '</div>' +
+        '<div class="confirm-actions">' +
+          '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\\'reset-pw-overlay\\').remove()">Cancel</button>' +
+          '<button class="btn btn-primary btn-sm" onclick="doResetPassword(\\'' + userId + '\\')">Reset Password</button>' +
+        '</div></div></div>';
+
+      document.body.insertAdjacentHTML('beforeend', html);
+      document.getElementById('reset-pw-input').focus();
+    }
+
+    async function doResetPassword(userId) {
+      const password = document.getElementById('reset-pw-input').value;
+      if (!password) { toast('Password is required', 'error'); return; }
+
       try {
-        await api('/admin/api/keys/' + keyId, {
-          method: 'PATCH',
-          body: JSON.stringify({ is_active: false }),
+        await api('/admin/api/users/' + userId + '/reset-password', {
+          method: 'POST',
+          body: JSON.stringify({ password }),
         });
-        keysData = await api('/admin/api/keys');
-        renderKeys();
-        toast('Key revoked');
+        document.getElementById('reset-pw-overlay').remove();
+        toast('Password reset successfully');
+      } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+      }
+    }
+
+    async function deactivateUser(userId, name) {
+      if (!confirm('Deactivate user "' + name + '"? They will lose MCP access immediately.')) return;
+      try {
+        await api('/admin/api/users/' + userId + '/deactivate', { method: 'POST' });
+        usersData = await api('/admin/api/users');
+        renderUsers();
+        toast('User deactivated');
+      } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+      }
+    }
+
+    async function reactivateUser(userId) {
+      try {
+        await api('/admin/api/users/' + userId, {
+          method: 'PATCH',
+          body: JSON.stringify({ is_active: true }),
+        });
+        usersData = await api('/admin/api/users');
+        renderUsers();
+        toast('User reactivated');
       } catch (e) {
         toast('Failed: ' + e.message, 'error');
       }
@@ -1127,7 +782,7 @@ function dashboardPage(data) {
           '<td><strong>' + esc(r.name) + '</strong></td>' +
           '<td style="color:var(--text-secondary)">' + esc(r.description) + '</td>' +
           '<td>' +
-            '<span class="tool-count" onclick="this.nextElementSibling.classList.toggle(\\' visible\\')">' + toolCount + ' tools</span>' +
+            '<span class="tool-count" onclick="this.nextElementSibling.classList.toggle(\\'visible\\')">' + toolCount + ' tools</span>' +
             '<div class="tools-grid">' + toolChips + '</div>' +
           '</td>' +
           '<td><button class="btn btn-secondary btn-sm" onclick="editRole(\\'' + r.id + '\\')">Edit</button></td>' +
@@ -1167,7 +822,7 @@ function dashboardPage(data) {
 
       const tools = role.allowed_tools || [];
       const toolChecks = allTools.map(t =>
-        '<label><input type=\\"checkbox\\" value=\\"' + t + '\\"' + (tools.includes(t) ? ' checked' : '') + '> ' + t + '</label>'
+        '<label><input type="checkbox" value="' + t + '"' + (tools.includes(t) ? ' checked' : '') + '> ' + t + '</label>'
       ).join('');
 
       const html = '<div class="confirm-overlay" id="edit-role-overlay">' +
@@ -1207,15 +862,15 @@ function dashboardPage(data) {
     async function seedRoles() {
       try {
         const result = await api('/admin/api/seed', { method: 'POST' });
-        if (result.skipped) {
-          toast('Roles already exist, skipped seeding', 'error');
+        rolesData = await api('/admin/api/roles');
+        renderRoles();
+        // Update role select in user form
+        const roleSelect = document.getElementById('new-user-role');
+        roleSelect.innerHTML = rolesData.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
+        if (result.created.length > 0) {
+          toast('Roles created: ' + result.created.join(', '));
         } else {
-          rolesData = await api('/admin/api/roles');
-          renderRoles();
-          // Also refresh role options for key creation
-          const roleSelect = document.getElementById('new-key-role');
-          roleSelect.innerHTML = rolesData.map(r => '<option value="' + r.id + '">' + r.name + '</option>').join('');
-          toast('Default roles created: ' + result.created.join(', '));
+          toast('Roles already up to date');
         }
       } catch (e) {
         toast('Failed: ' + e.message, 'error');
@@ -1225,12 +880,12 @@ function dashboardPage(data) {
     // ── Activity ──
     async function loadActivity() {
       const days = document.getElementById('activity-range').value;
-      const keyId = document.getElementById('activity-user').value;
+      const userId = document.getElementById('activity-user').value;
       const tool = document.getElementById('activity-tool').value;
 
       const params = new URLSearchParams();
       if (days !== '0') params.set('days', days);
-      if (keyId) params.set('key_id', keyId);
+      if (userId) params.set('user_id', userId);
       if (tool) params.set('tool_name', tool);
       params.set('limit', '200');
 
@@ -1244,12 +899,12 @@ function dashboardPage(data) {
         }
 
         tbody.innerHTML = logs.map(l => {
-          const label = l.api_key ? l.api_key.label : 'System';
+          const userName = l.user ? l.user.name : 'System';
           const statusIcon = l.success ? '<span class="status-ok">OK</span>' : '<span class="status-err">ERR</span>';
           const duration = l.duration_ms ? l.duration_ms + 'ms' : '-';
           return '<tr>' +
             '<td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">' + formatTime(l.created_at) + '</td>' +
-            '<td>' + esc(label) + '</td>' +
+            '<td>' + esc(userName) + '</td>' +
             '<td><span class="mono">' + esc(l.tool_name) + '</span></td>' +
             '<td>' + statusIcon + '</td>' +
             '<td style="font-size:12px;color:var(--text-secondary)">' + duration + '</td>' +
@@ -1261,7 +916,7 @@ function dashboardPage(data) {
     }
 
     // ── Init ──
-    renderKeys();
+    renderUsers();
     renderRoles();
   </script>
 </body>
