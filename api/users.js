@@ -13,6 +13,7 @@ exports.getUser = getUser;
 exports.updateUser = updateUser;
 exports.deactivateUser = deactivateUser;
 exports.resetPassword = resetPassword;
+exports.changePassword = changePassword;
 exports.touchLastActive = touchLastActive;
 exports.seedAdminUser = seedAdminUser;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
@@ -133,6 +134,17 @@ async function resetPassword(id, newPassword) {
         passwordHash,
         id,
     ]);
+}
+async function changePassword(email, currentPassword, newPassword) {
+    const user = await authenticateUser(email, currentPassword);
+    if (!user)
+        return { success: false, error: "Current password is incorrect." };
+    const passwordHash = await bcryptjs_1.default.hash(newPassword, BCRYPT_ROUNDS);
+    await (0, db_js_1.query)(`UPDATE mcp_users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [
+        passwordHash,
+        user.id,
+    ]);
+    return { success: true };
 }
 async function touchLastActive(id) {
     (0, db_js_1.query)(`UPDATE mcp_users SET last_active_at = NOW() WHERE id = $1`, [id]).catch(() => { });

@@ -230,6 +230,131 @@ app.post("/oauth/token", async (req, res) => {
 });
 // ── Admin Dashboard ──
 app.use("/admin", routes_js_1.adminRouter);
+// ── Account: Change Password ──
+function changePasswordPage(opts = {}) {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TripleSeat MCP - Change Password</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #0a0a0a; --surface: #141414; --border: #262626;
+      --text: #ededed; --text-secondary: #888888;
+      --accent: #0070f3; --accent-hover: #0060d3;
+      --success: #00c853; --success-subtle: rgba(0, 200, 83, 0.1);
+      --danger: #ff4444; --danger-subtle: rgba(255, 68, 68, 0.1);
+      --radius-sm: 6px;
+      --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font);
+      font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .wrapper {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 20px;
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 40px; width: 100%; max-width: 400px;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+    .card h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+    .card .subtitle { color: var(--text-secondary); font-size: 13px; margin-bottom: 28px; }
+    label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
+    input[type="email"], input[type="password"] {
+      width: 100%; padding: 10px 12px; background: var(--bg);
+      border: 1px solid var(--border); border-radius: var(--radius-sm);
+      color: var(--text); font-size: 14px; font-family: var(--font);
+      outline: none; transition: border-color 0.15s; margin-bottom: 16px;
+    }
+    input:focus { border-color: var(--accent); }
+    .error-msg {
+      background: var(--danger-subtle); color: var(--danger);
+      padding: 10px 12px; border-radius: var(--radius-sm);
+      font-size: 13px; margin-bottom: 16px;
+      border: 1px solid rgba(255, 68, 68, 0.2);
+    }
+    .success-msg {
+      background: var(--success-subtle); color: var(--success);
+      padding: 10px 12px; border-radius: var(--radius-sm);
+      font-size: 13px; margin-bottom: 16px;
+      border: 1px solid rgba(0, 200, 83, 0.2);
+    }
+    .btn {
+      width: 100%; padding: 10px 16px; font-size: 13px; font-weight: 500;
+      font-family: var(--font); border-radius: var(--radius-sm);
+      border: 1px solid var(--accent); background: var(--accent);
+      color: white; cursor: pointer; transition: background 0.15s; margin-top: 4px;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .footer { text-align: center; margin-top: 20px; font-size: 12px; color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <h1>Change Password</h1>
+      <p class="subtitle">Update your TripleSeat MCP password</p>
+      ${opts.error ? `<div class="error-msg">${esc(opts.error)}</div>` : ""}
+      ${opts.success ? `<div class="success-msg">${esc(opts.success)}</div>` : ""}
+      <form method="POST" action="/account/change-password">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="you@example.com" autofocus required>
+        <label for="current_password">Current Password</label>
+        <input type="password" id="current_password" name="current_password" placeholder="Enter current password" required>
+        <label for="new_password">New Password</label>
+        <input type="password" id="new_password" name="new_password" placeholder="Enter new password" required>
+        <label for="confirm_password">Confirm New Password</label>
+        <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirm new password" required>
+        <button type="submit" class="btn">Change Password</button>
+      </form>
+      <p class="footer">TripleSeat MCP &middot; Stormbreaker Digital</p>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+function esc(s) {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+app.get("/account/change-password", (_req, res) => {
+    res.type("html").send(changePasswordPage());
+});
+app.post("/account/change-password", async (req, res) => {
+    const { email, current_password, new_password, confirm_password } = req.body;
+    if (!email || !current_password || !new_password || !confirm_password) {
+        res.type("html").send(changePasswordPage({ error: "All fields are required." }));
+        return;
+    }
+    if (new_password.length < 8) {
+        res.type("html").send(changePasswordPage({ error: "New password must be at least 8 characters." }));
+        return;
+    }
+    if (new_password !== confirm_password) {
+        res.type("html").send(changePasswordPage({ error: "New passwords do not match." }));
+        return;
+    }
+    if (current_password === new_password) {
+        res.type("html").send(changePasswordPage({ error: "New password must be different from your current password." }));
+        return;
+    }
+    try {
+        const result = await (0, users_js_1.changePassword)(email, current_password, new_password);
+        if (!result.success) {
+            res.type("html").send(changePasswordPage({ error: result.error || "Password change failed." }));
+            return;
+        }
+        res.type("html").send(changePasswordPage({ success: "Password changed successfully. You can close this page." }));
+    }
+    catch (err) {
+        res.type("html").send(changePasswordPage({ error: "An error occurred. Please try again." }));
+    }
+});
 // ── TripleSeat OAuth Setup Routes (one-time) ──
 app.get("/auth/login", (req, res) => {
     const host = req.headers.host || "tripleseat-mcp.vercel.app";

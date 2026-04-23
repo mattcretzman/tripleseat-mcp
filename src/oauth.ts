@@ -297,7 +297,11 @@ export function renderLoginPage(params: {
         <input type="password" id="password" name="password" placeholder="Enter your password" required>
         <button type="submit" class="btn">Sign In &amp; Authorize</button>
       </form>
-      <p class="footer">TripleSeat MCP &middot; Stormbreaker Digital</p>
+      <p class="footer">
+        <a href="/account/change-password" style="color: var(--text-secondary); text-decoration: none;">Change password</a>
+        <span style="margin: 0 6px; color: var(--border);">&middot;</span>
+        TripleSeat MCP &middot; Stormbreaker Digital
+      </p>
     </div>
   </div>
 </body>

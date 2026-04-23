@@ -191,6 +191,23 @@ export async function resetPassword(id: string, newPassword: string): Promise<vo
   ]);
 }
 
+export async function changePassword(
+  email: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<{ success: boolean; error?: string }> {
+  const user = await authenticateUser(email, currentPassword);
+  if (!user) return { success: false, error: "Current password is incorrect." };
+
+  const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS);
+  await query(`UPDATE mcp_users SET password_hash = $1, updated_at = NOW() WHERE id = $2`, [
+    passwordHash,
+    user.id,
+  ]);
+
+  return { success: true };
+}
+
 export async function touchLastActive(id: string): Promise<void> {
   query(`UPDATE mcp_users SET last_active_at = NOW() WHERE id = $1`, [id]).catch(() => {});
 }
