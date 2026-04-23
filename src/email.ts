@@ -1,14 +1,14 @@
 /**
  * Email service — sends user invite emails via Resend.
+ * Uses dynamic import to avoid blocking app startup with heavy transitive deps.
  */
-
-import { Resend } from "resend";
 
 const FROM_ADDRESS = "TripleSeat MCP <noreply@stormbreakerdigital.com>";
 
-function getResend(): Resend {
+async function getResend() {
   const key = process.env.RESEND_API_KEY;
   if (!key) throw new Error("RESEND_API_KEY environment variable not set");
+  const { Resend } = await import("resend");
   return new Resend(key);
 }
 
@@ -21,7 +21,7 @@ export async function sendInviteEmail(params: {
   mcpUrl: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
-    const resend = getResend();
+    const resend = await getResend();
 
     const { data, error } = await resend.emails.send({
       from: FROM_ADDRESS,
