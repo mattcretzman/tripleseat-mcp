@@ -58,7 +58,7 @@ export function getAuthorizeUrl(redirectUri: string): string {
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: "read",
+    scope: "read_write",
   });
   return AUTHORIZE_URL + "?" + params.toString();
 }

@@ -11,6 +11,7 @@ exports.updateRole = updateRole;
 exports.seedDefaultRoles = seedDefaultRoles;
 const db_js_1 = require("./db.js");
 const ALL_TOOLS = [
+    // Read tools
     "get_event",
     "search_events",
     "list_upcoming_events",
@@ -28,6 +29,20 @@ const ALL_TOOLS = [
     "list_locations",
     "get_location",
     "list_users",
+    // Write tools
+    "create_lead",
+    "update_lead",
+    "create_booking",
+    "update_booking",
+    "create_event",
+    "update_event",
+    "create_contact",
+    "update_contact",
+    "create_account",
+    "update_account",
+    "create_lead_task",
+    "create_booking_task",
+    "create_contact_task",
 ];
 exports.ALL_TOOLS = ALL_TOOLS;
 /**
@@ -86,7 +101,7 @@ async function seedDefaultRoles() {
     const defaults = [
         {
             name: "admin",
-            description: "Full access to all 17 tools",
+            description: "Full access to all 30 tools (read + write)",
             allowed_tools: [...ALL_TOOLS],
         },
         {
@@ -96,7 +111,7 @@ async function seedDefaultRoles() {
         },
         {
             name: "coordinator",
-            description: "Events, leads, contacts, locations, and availability — no financials",
+            description: "Events, leads, contacts, locations, availability — read + write but no financials or booking writes",
             allowed_tools: [
                 "get_event",
                 "search_events",
@@ -112,11 +127,21 @@ async function seedDefaultRoles() {
                 "list_sites",
                 "list_locations",
                 "get_location",
+                "create_lead",
+                "update_lead",
+                "create_event",
+                "update_event",
+                "create_contact",
+                "update_contact",
+                "create_account",
+                "update_account",
+                "create_lead_task",
+                "create_contact_task",
             ],
         },
         {
             name: "viewer",
-            description: "Read-only access to individual records",
+            description: "Read-only access to individual records — no write access",
             allowed_tools: [
                 "get_event",
                 "get_lead",

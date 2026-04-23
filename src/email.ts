@@ -5,7 +5,6 @@
 import { Resend } from "resend";
 
 const FROM_ADDRESS = "TripleSeat MCP <noreply@stormbreakerdigital.com>";
-const MCP_URL = "https://tripleseat-mcp.vercel.app/mcp";
 
 function getResend(): Resend {
   const key = process.env.RESEND_API_KEY;
@@ -19,6 +18,7 @@ export async function sendInviteEmail(params: {
   password: string;
   roleName: string;
   invitedBy: string;
+  mcpUrl: string;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const resend = getResend();
@@ -49,7 +49,9 @@ function inviteEmailHtml(params: {
   password: string;
   roleName: string;
   invitedBy: string;
+  mcpUrl: string;
 }): string {
+  const MCP_URL = params.mcpUrl;
   return `<!DOCTYPE html>
 <html>
 <head>

@@ -9,6 +9,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.tripleseatRequest = tripleseatRequest;
 exports.tripleseatGet = tripleseatGet;
 exports.tripleseatPost = tripleseatPost;
+exports.tripleseatPostLead = tripleseatPostLead;
 exports.tripleseatPut = tripleseatPut;
 exports.tripleseatDelete = tripleseatDelete;
 exports.formatDate = formatDate;
@@ -73,6 +74,22 @@ async function tripleseatGet(endpoint, params = {}) {
  */
 async function tripleseatPost(endpoint, body, params = {}) {
     return tripleseatRequest(endpoint, { method: "POST", body, params });
+}
+/**
+ * POST to create a lead via the Lead Form API.
+ * TripleSeat lead creation uses a public_key instead of OAuth bearer auth.
+ */
+async function tripleseatPostLead(body) {
+    const publicKey = process.env.TRIPLESEAT_PUBLIC_KEY;
+    if (!publicKey) {
+        throw new Error("Missing TRIPLESEAT_PUBLIC_KEY environment variable. " +
+            "Find it in TripleSeat under Settings > Lead Forms > Setup Codes.");
+    }
+    return tripleseatRequest("/leads/create", {
+        method: "POST",
+        body,
+        params: { public_key: publicKey },
+    });
 }
 /**
  * PUT to update an existing record

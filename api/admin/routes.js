@@ -95,6 +95,9 @@ router.post("/api/users", async (req, res) => {
         let invite_sent = false;
         let invite_error;
         if (send_invite) {
+            const protocol = req.headers["x-forwarded-proto"] || "https";
+            const host = req.headers.host || "tripleseat-mcp.vercel.app";
+            const mcpUrl = `${protocol}://${host}/mcp`;
             const role = await (0, roles_js_1.getRole)(role_id);
             const result = await (0, email_js_1.sendInviteEmail)({
                 to: email,
@@ -102,6 +105,7 @@ router.post("/api/users", async (req, res) => {
                 password,
                 roleName: role?.name || "user",
                 invitedBy: "Admin",
+                mcpUrl,
             });
             invite_sent = result.success;
             invite_error = result.error;
@@ -135,6 +139,9 @@ router.post("/api/users/:id/send-invite", async (req, res) => {
             res.status(404).json({ error: "User not found" });
             return;
         }
+        const protocol = req.headers["x-forwarded-proto"] || "https";
+        const host = req.headers.host || "tripleseat-mcp.vercel.app";
+        const mcpUrl = `${protocol}://${host}/mcp`;
         const role = await (0, roles_js_1.getRole)(user.role_id);
         const result = await (0, email_js_1.sendInviteEmail)({
             to: user.email,
@@ -142,6 +149,7 @@ router.post("/api/users/:id/send-invite", async (req, res) => {
             password,
             roleName: role?.name || "user",
             invitedBy: "Admin",
+            mcpUrl,
         });
         if (result.success) {
             res.json({ ok: true });

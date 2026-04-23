@@ -113,6 +113,27 @@ export async function tripleseatPost<T = any>(
 }
 
 /**
+ * POST to create a lead via the Lead Form API.
+ * TripleSeat lead creation uses a public_key instead of OAuth bearer auth.
+ */
+export async function tripleseatPostLead<T = any>(
+  body: Record<string, any>
+): Promise<ApiResponse<T>> {
+  const publicKey = process.env.TRIPLESEAT_PUBLIC_KEY;
+  if (!publicKey) {
+    throw new Error(
+      "Missing TRIPLESEAT_PUBLIC_KEY environment variable. " +
+      "Find it in TripleSeat under Settings > Lead Forms > Setup Codes."
+    );
+  }
+  return tripleseatRequest<T>("/leads/create", {
+    method: "POST",
+    body,
+    params: { public_key: publicKey },
+  });
+}
+
+/**
  * PUT to update an existing record
  */
 export async function tripleseatPut<T = any>(

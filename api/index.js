@@ -468,6 +468,242 @@ const TOOLS = [
         name: "list_users",
         description: "List all TripleSeat users (team members).",
         inputSchema: { type: "object", properties: {} }
+    },
+    // ── Write Tools ──
+    {
+        name: "create_lead",
+        description: "Create a new lead in TripleSeat. Requires first_name, last_name, email_address, and phone_number at minimum.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                first_name: { type: "string", description: "Contact first name" },
+                last_name: { type: "string", description: "Contact last name" },
+                email_address: { type: "string", description: "Contact email" },
+                phone_number: { type: "string", description: "Contact phone number" },
+                company: { type: "string", description: "Company or organization name" },
+                event_description: { type: "string", description: "Nature of event (becomes the event name when converted)" },
+                event_date: { type: "string", description: "Requested event date (MM/DD/YYYY)" },
+                start_time: { type: "string", description: "Requested start time (e.g. 3:00 PM)" },
+                end_time: { type: "string", description: "Requested end time (e.g. 5:00 PM)" },
+                guest_count: { type: "number", description: "Expected number of guests" },
+                location_id: { type: "number", description: "Location ID (required if multiple locations)" },
+                additional_information: { type: "string", description: "Additional details or notes" },
+                contact_preference: { type: "string", enum: ["Email", "Phone"], description: "Preferred contact method" }
+            },
+            required: ["first_name", "last_name", "email_address", "phone_number"]
+        }
+    },
+    {
+        name: "update_lead",
+        description: "Update an existing lead in TripleSeat. Only include fields you want to change.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                lead_id: { type: "string", description: "The TripleSeat lead ID to update" },
+                first_name: { type: "string" },
+                last_name: { type: "string" },
+                email_address: { type: "string" },
+                phone_number: { type: "string" },
+                company: { type: "string" },
+                event_description: { type: "string" },
+                event_date: { type: "string", description: "MM/DD/YYYY" },
+                start_time: { type: "string" },
+                end_time: { type: "string" },
+                guest_count: { type: "number" },
+                location_id: { type: "number" },
+                additional_information: { type: "string" },
+                status: { type: "string" }
+            },
+            required: ["lead_id"]
+        }
+    },
+    {
+        name: "create_booking",
+        description: "Create a new booking in TripleSeat. Requires name, start_date, end_date, and location_id.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "Booking name" },
+                start_date: { type: "string", description: "Start date (MM/DD/YYYY)" },
+                end_date: { type: "string", description: "End date (MM/DD/YYYY)" },
+                location_id: { type: "number", description: "Location ID for the venue" },
+                account_id: { type: "number", description: "Account ID to associate" },
+                contact_id: { type: "number", description: "Primary contact ID" },
+                status: { type: "string", description: "Booking status" },
+                description: { type: "string", description: "Booking description or notes" }
+            },
+            required: ["name", "start_date", "end_date", "location_id"]
+        }
+    },
+    {
+        name: "update_booking",
+        description: "Update an existing booking in TripleSeat. Only include fields you want to change.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                booking_id: { type: "string", description: "The TripleSeat booking ID to update" },
+                name: { type: "string" },
+                start_date: { type: "string", description: "MM/DD/YYYY" },
+                end_date: { type: "string", description: "MM/DD/YYYY" },
+                location_id: { type: "number" },
+                status: { type: "string" },
+                description: { type: "string" }
+            },
+            required: ["booking_id"]
+        }
+    },
+    {
+        name: "create_event",
+        description: "Create a new event in TripleSeat. Requires name, event_start, event_end, account_id, contact_id, location_id, room_ids, and status.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "Event name" },
+                event_start: { type: "string", description: "Event start date/time (MM/DD/YYYY HH:MM AM/PM)" },
+                event_end: { type: "string", description: "Event end date/time (MM/DD/YYYY HH:MM AM/PM)" },
+                account_id: { type: "number", description: "Account ID" },
+                contact_id: { type: "number", description: "Primary contact ID" },
+                location_id: { type: "number", description: "Location ID" },
+                room_ids: { type: "array", items: { type: "number" }, description: "Array of room IDs for the event" },
+                status: { type: "string", enum: ["DEFINITE", "TENTATIVE", "PROSPECT", "CLOSED", "LOST"], description: "Event status" },
+                guest_count: { type: "number", description: "Expected guest count" },
+                description: { type: "string", description: "Event description" }
+            },
+            required: ["name", "event_start", "event_end", "account_id", "contact_id", "location_id", "room_ids", "status"]
+        }
+    },
+    {
+        name: "update_event",
+        description: "Update an existing event in TripleSeat. Only include fields you want to change.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                event_id: { type: "string", description: "The TripleSeat event ID to update" },
+                name: { type: "string" },
+                event_start: { type: "string", description: "MM/DD/YYYY HH:MM AM/PM" },
+                event_end: { type: "string", description: "MM/DD/YYYY HH:MM AM/PM" },
+                status: { type: "string", enum: ["DEFINITE", "TENTATIVE", "PROSPECT", "CLOSED", "LOST"] },
+                guest_count: { type: "number" },
+                description: { type: "string" },
+                room_ids: { type: "array", items: { type: "number" } }
+            },
+            required: ["event_id"]
+        }
+    },
+    {
+        name: "create_contact",
+        description: "Create a new contact in TripleSeat. Requires first_name and account_id. Include site_id if there are multiple sites.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                first_name: { type: "string", description: "Contact first name" },
+                last_name: { type: "string", description: "Contact last name" },
+                account_id: { type: "number", description: "Account to associate the contact with" },
+                site_id: { type: "number", description: "Site ID (only required if multiple sites exist)" },
+                email: { type: "string", description: "Email address" },
+                phone: { type: "string", description: "Phone number" },
+                title: { type: "string", description: "Job title" }
+            },
+            required: ["first_name", "account_id"]
+        }
+    },
+    {
+        name: "update_contact",
+        description: "Update an existing contact in TripleSeat. Only include fields you want to change.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                contact_id: { type: "string", description: "The TripleSeat contact ID to update" },
+                first_name: { type: "string" },
+                last_name: { type: "string" },
+                email: { type: "string" },
+                phone: { type: "string" },
+                title: { type: "string" },
+                company: { type: "string" }
+            },
+            required: ["contact_id"]
+        }
+    },
+    {
+        name: "create_account",
+        description: "Create a new account in TripleSeat. Requires name. Include site_id if there are multiple sites.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                name: { type: "string", description: "Account/business name" },
+                site_id: { type: "number", description: "Site ID (only required if multiple sites exist)" },
+                description: { type: "string", description: "Account description" },
+                email: { type: "string", description: "Account email" },
+                phone: { type: "string", description: "Account phone number" }
+            },
+            required: ["name"]
+        }
+    },
+    {
+        name: "update_account",
+        description: "Update an existing account in TripleSeat. Only include fields you want to change.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                account_id: { type: "string", description: "The TripleSeat account ID to update" },
+                name: { type: "string" },
+                description: { type: "string" },
+                email: { type: "string" },
+                phone: { type: "string" }
+            },
+            required: ["account_id"]
+        }
+    },
+    {
+        name: "create_lead_task",
+        description: "Create a task on a lead in TripleSeat.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                lead_id: { type: "string", description: "The lead ID to add the task to" },
+                body: { type: "string", description: "Task description" },
+                due_date: { type: "string", description: "Due date/time in ISO 8601 format" },
+                priority: { type: "number", enum: [1, 2, 3], description: "Priority: 1=Low, 2=Medium, 3=High" },
+                task_type_id: { type: "number", description: "Task type ID (see Sites API for available types)" },
+                assignee_ids: { type: "array", items: { type: "number" }, description: "User IDs to assign the task to" },
+                site_id: { type: "number", description: "Site ID the lead belongs to" }
+            },
+            required: ["lead_id", "body", "due_date", "priority", "task_type_id", "assignee_ids", "site_id"]
+        }
+    },
+    {
+        name: "create_booking_task",
+        description: "Create a task on a booking in TripleSeat.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                booking_id: { type: "string", description: "The booking ID to add the task to" },
+                body: { type: "string", description: "Task description" },
+                due_date: { type: "string", description: "Due date/time in ISO 8601 format" },
+                priority: { type: "number", enum: [1, 2, 3], description: "Priority: 1=Low, 2=Medium, 3=High" },
+                task_type_id: { type: "number", description: "Task type ID (see Sites API for available types)" },
+                assignee_ids: { type: "array", items: { type: "number" }, description: "User IDs to assign the task to" },
+                site_id: { type: "number", description: "Site ID the booking belongs to" }
+            },
+            required: ["booking_id", "body", "due_date", "priority", "task_type_id", "assignee_ids", "site_id"]
+        }
+    },
+    {
+        name: "create_contact_task",
+        description: "Create a task on a contact in TripleSeat.",
+        inputSchema: {
+            type: "object",
+            properties: {
+                contact_id: { type: "string", description: "The contact ID to add the task to" },
+                body: { type: "string", description: "Task description" },
+                due_date: { type: "string", description: "Due date/time in ISO 8601 format" },
+                priority: { type: "number", enum: [1, 2, 3], description: "Priority: 1=Low, 2=Medium, 3=High" },
+                task_type_id: { type: "number", description: "Task type ID (see Sites API for available types)" },
+                assignee_ids: { type: "array", items: { type: "number" }, description: "User IDs to assign the task to" },
+                site_id: { type: "number", description: "Site ID the contact belongs to" }
+            },
+            required: ["contact_id", "body", "due_date", "priority", "task_type_id", "assignee_ids", "site_id"]
+        }
     }
 ];
 // ── Response Size Management ──
@@ -663,6 +899,76 @@ async function executeTool(name, args) {
             const { data } = await (0, tripleseat_js_1.tripleseatGet)("/users");
             return JSON.stringify(data, null, 2);
         }
+        // ── Write Tools ──
+        case "create_lead": {
+            const { lead_id, ...leadFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPostLead)({ lead: leadFields });
+            return JSON.stringify(data, null, 2);
+        }
+        case "update_lead": {
+            const { lead_id, ...leadFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/leads/${lead_id}`, { lead: leadFields });
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_booking": {
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/bookings", { booking: args });
+            return JSON.stringify(data, null, 2);
+        }
+        case "update_booking": {
+            const { booking_id, ...bookingFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/bookings/${booking_id}`, { booking: bookingFields });
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_event": {
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/events", { event: args });
+            return JSON.stringify(data, null, 2);
+        }
+        case "update_event": {
+            const { event_id, ...eventFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/events/${event_id}`, { event: eventFields });
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_contact": {
+            const { site_id, ...contactFields } = args;
+            const body = { contact: contactFields };
+            if (site_id)
+                body.site_id = site_id;
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/contacts", body);
+            return JSON.stringify(data, null, 2);
+        }
+        case "update_contact": {
+            const { contact_id, ...contactFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/contacts/${contact_id}`, { contact: contactFields });
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_account": {
+            const { site_id: acctSiteId, ...accountFields } = args;
+            const body = { account: accountFields };
+            if (acctSiteId)
+                body.site_id = acctSiteId;
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)("/accounts", body);
+            return JSON.stringify(data, null, 2);
+        }
+        case "update_account": {
+            const { account_id, ...accountFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPut)(`/accounts/${account_id}`, { account: accountFields });
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_lead_task": {
+            const { lead_id: taskLeadId, ...taskFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)(`/leads/${taskLeadId}/tasks`, taskFields);
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_booking_task": {
+            const { booking_id: taskBookingId, ...taskFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)(`/bookings/${taskBookingId}/tasks`, taskFields);
+            return JSON.stringify(data, null, 2);
+        }
+        case "create_contact_task": {
+            const { contact_id: taskContactId, ...taskFields } = args;
+            const { data } = await (0, tripleseat_js_1.tripleseatPost)(`/contacts/${taskContactId}/tasks`, taskFields);
+            return JSON.stringify(data, null, 2);
+        }
         default:
             throw new Error(`Unknown tool: ${name}`);
     }
@@ -672,7 +978,7 @@ const SERVER_INFO = {
     name: "tripleseat",
     version: "1.0.0",
 };
-const SERVER_INSTRUCTIONS = `You are connected to TripleSeat, a CRM and event management platform for wedding and event venues. This server provides live read access to event data, leads, bookings, contacts, accounts, and venue locations.
+const SERVER_INSTRUCTIONS = `You are connected to TripleSeat, a CRM and event management platform for wedding and event venues. This server provides live read AND write access to event data, leads, bookings, contacts, accounts, and venue locations.
 
 Key context for this installation:
 - Two venues: Knotting Hill Place and Brighton Abbey (both in the DFW area, ~10 minutes apart)
@@ -686,6 +992,15 @@ IMPORTANT — Response size management:
 - To get full details (BEOs, packages, vendors, financials), use the get_event, get_lead, get_booking, or get_contact tools with the specific ID
 - Always use the search/list → then get_detail pattern: find items first, then drill into the ones the user cares about
 - Do NOT call get_event/get_lead/get_booking for every item in a list — only fetch full details when the user asks about a specific item
+
+IMPORTANT — Write operations safety:
+- ALWAYS confirm with the user before creating or modifying any records
+- Summarize exactly what will be created or changed and get explicit approval before calling a write tool
+- For updates, show the current value and the proposed new value so the user can verify
+- Never bulk-create or bulk-update records without per-record user confirmation
+- When creating events, all required fields must be provided: name, event_start, event_end, account_id, contact_id, location_id, room_ids, and status
+- When creating leads, first_name, last_name, email_address, and phone_number are required
+- Task creation requires body, due_date, priority, task_type_id, assignee_ids, and site_id
 
 When answering questions:
 - Be specific with dates, names, and numbers pulled from the data

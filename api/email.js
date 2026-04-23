@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendInviteEmail = sendInviteEmail;
 const resend_1 = require("resend");
 const FROM_ADDRESS = "TripleSeat MCP <noreply@stormbreakerdigital.com>";
-const MCP_URL = "https://tripleseat-mcp.vercel.app/mcp";
 function getResend() {
     const key = process.env.RESEND_API_KEY;
     if (!key)
@@ -35,6 +34,7 @@ async function sendInviteEmail(params) {
     }
 }
 function inviteEmailHtml(params) {
+    const MCP_URL = params.mcpUrl;
     return `<!DOCTYPE html>
 <html>
 <head>
