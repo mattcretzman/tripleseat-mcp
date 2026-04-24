@@ -16,6 +16,7 @@ import { contactTools } from "./contacts.js";
 import { accountTools } from "./accounts.js";
 import { venueTools } from "./venues.js";
 import { taskTools } from "./tasks.js";
+import { automationTools } from "./automation.js";
 
 export type { ToolDefinition } from "./types.js";
 
@@ -27,6 +28,7 @@ const ALL_TOOLS: ToolDefinition[] = [
   ...accountTools,
   ...venueTools,
   ...taskTools,
+  ...automationTools,
 ];
 
 const toolMap = new Map<string, ToolDefinition>(

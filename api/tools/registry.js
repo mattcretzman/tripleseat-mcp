@@ -19,6 +19,7 @@ const contacts_js_1 = require("./contacts.js");
 const accounts_js_1 = require("./accounts.js");
 const venues_js_1 = require("./venues.js");
 const tasks_js_1 = require("./tasks.js");
+const automation_js_1 = require("./automation.js");
 const ALL_TOOLS = [
     ...events_js_1.eventTools,
     ...leads_js_1.leadTools,
@@ -27,6 +28,7 @@ const ALL_TOOLS = [
     ...accounts_js_1.accountTools,
     ...venues_js_1.venueTools,
     ...tasks_js_1.taskTools,
+    ...automation_js_1.automationTools,
 ];
 const toolMap = new Map(ALL_TOOLS.map((t) => [t.name, t]));
 /**
