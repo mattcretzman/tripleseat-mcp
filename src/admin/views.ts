@@ -123,7 +123,7 @@ const CSS = `
   .header-right { display: flex; align-items: center; gap: 12px; }
   .header-right .status { font-size: 12px; color: var(--text-secondary); }
 
-  .stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stats-bar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
 
   .stat-card {
     background: var(--surface); border: 1px solid var(--border);
@@ -282,11 +282,16 @@ const CSS = `
   .checkbox-row input[type="checkbox"] { accent-color: var(--accent); }
   .checkbox-row label { font-size: 13px; color: var(--text-secondary); cursor: pointer; }
 
+  @media (max-width: 1024px) {
+    .stats-bar { grid-template-columns: repeat(3, 1fr); }
+  }
+
   @media (max-width: 768px) {
     .stats-bar { grid-template-columns: repeat(2, 1fr); }
     .form-row { flex-direction: column; }
     .form-group { min-width: 100%; }
     .filters { flex-direction: column; }
+    .overview-grid { grid-template-columns: 1fr !important; }
   }
 
   .toast {
@@ -303,6 +308,155 @@ const CSS = `
     from { transform: translateY(12px); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
   }
+
+  .stat-card .stat-value.success { color: var(--success); }
+  .stat-card .stat-value.danger { color: var(--danger); }
+  .stat-card .stat-value.warning { color: var(--warning); }
+
+  .connection-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px;
+  }
+  .connection-dot.ready { background: var(--success); box-shadow: 0 0 6px rgba(0, 200, 83, 0.4); }
+  .connection-dot.warning { background: var(--warning); box-shadow: 0 0 6px rgba(245, 166, 35, 0.4); }
+  .connection-dot.error { background: var(--danger); box-shadow: 0 0 6px rgba(255, 68, 68, 0.4); }
+
+  .overview-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;
+  }
+
+  .overview-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+  }
+
+  .overview-panel h3 {
+    font-size: 13px; font-weight: 600; color: var(--text-secondary);
+    text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 16px;
+  }
+
+  .overview-panel-full { grid-column: 1 / -1; }
+
+  .chart-container { position: relative; height: 180px; }
+
+  .chart-bars {
+    display: flex; align-items: flex-end; gap: 2px; height: 160px;
+    padding-bottom: 20px; position: relative;
+  }
+
+  .chart-bar-group {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    position: relative; min-width: 0;
+  }
+
+  .chart-bar {
+    width: 100%; background: var(--accent); border-radius: 3px 3px 0 0;
+    min-height: 0; transition: all 0.2s; cursor: pointer; position: relative;
+  }
+  .chart-bar:hover { background: var(--accent-hover); }
+  .chart-bar.zero { background: var(--border); min-height: 2px; }
+
+  .chart-label {
+    font-size: 9px; color: var(--text-tertiary); margin-top: 4px;
+    white-space: nowrap; position: absolute; bottom: -18px;
+  }
+
+  .chart-tooltip {
+    position: absolute; top: -28px; left: 50%; transform: translateX(-50%);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 8px; font-size: 11px; font-weight: 600;
+    white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s;
+    z-index: 10;
+  }
+  .chart-bar-group:hover .chart-tooltip { opacity: 1; }
+
+  .chart-y-axis {
+    position: absolute; top: 0; left: 0; bottom: 20px;
+    display: flex; flex-direction: column; justify-content: space-between;
+    pointer-events: none; padding-right: 8px;
+  }
+  .chart-y-label { font-size: 10px; color: var(--text-tertiary); text-align: right; }
+
+  .h-bar-chart { display: flex; flex-direction: column; gap: 10px; }
+
+  .h-bar-row { display: flex; align-items: center; gap: 10px; }
+
+  .h-bar-label {
+    width: 140px; font-size: 12px; font-family: var(--mono);
+    color: var(--text-secondary); text-align: right; flex-shrink: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .h-bar-track {
+    flex: 1; height: 20px; background: var(--bg);
+    border-radius: 4px; overflow: hidden; position: relative;
+  }
+
+  .h-bar-fill {
+    height: 100%; background: var(--accent); border-radius: 4px;
+    transition: width 0.3s ease; min-width: 2px;
+  }
+
+  .h-bar-value {
+    width: 44px; font-size: 12px; font-weight: 600; text-align: left; flex-shrink: 0;
+  }
+
+  .top-users-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .top-user-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--bg); border-radius: var(--radius-sm);
+  }
+
+  .top-user-rank {
+    width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; border-radius: 50%;
+    background: var(--border); color: var(--text-secondary); margin-right: 10px; flex-shrink: 0;
+  }
+  .top-user-rank.rank-1 { background: var(--accent-subtle); color: var(--accent); }
+  .top-user-rank.rank-2 { background: var(--accent-subtle); color: var(--accent); }
+  .top-user-rank.rank-3 { background: var(--accent-subtle); color: var(--accent); }
+
+  .top-user-name { font-size: 13px; font-weight: 500; flex: 1; }
+  .top-user-count { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+
+  .pagination {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    background: var(--surface); border-radius: 0 0 var(--radius) var(--radius);
+  }
+
+  .pagination-info { font-size: 12px; color: var(--text-secondary); }
+
+  .pagination-controls { display: flex; gap: 4px; }
+
+  .pagination-btn {
+    padding: 4px 10px; font-size: 12px; font-family: var(--font);
+    background: transparent; border: 1px solid var(--border);
+    border-radius: 4px; color: var(--text-secondary); cursor: pointer;
+    transition: all 0.15s;
+  }
+  .pagination-btn:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); border-color: var(--border-light); }
+  .pagination-btn:disabled { opacity: 0.3; cursor: default; }
+  .pagination-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .health-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+  }
+
+  .health-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; }
+
+  .health-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .health-row:last-child { border-bottom: none; }
+
+  .health-label { color: var(--text-secondary); }
+  .health-value { font-weight: 500; }
+  .health-value.ok { color: var(--success); }
+  .health-value.warn { color: var(--warning); }
+  .health-value.err { color: var(--danger); }
 `;
 
 // ── Login Page ──
@@ -344,7 +498,19 @@ export interface DashboardData {
     total_calls: number;
     calls_today: number;
     calls_this_week: number;
+    error_count: number;
+    error_rate: number;
+    avg_duration_ms: number;
     top_tools: { tool_name: string; count: number }[];
+    top_users: { name: string; count: number }[];
+    calls_per_day: { date: string; count: number }[];
+  };
+  health: {
+    tripleseat_status: string;
+    tripleseat_token_expires_at: string | null;
+    tripleseat_token_updated_at: string | null;
+    oauth_client_count: number;
+    active_session_count: number;
   };
 }
 
@@ -370,6 +536,13 @@ export function dashboardPage(data: DashboardData): string {
   const toolCheckboxes = ALL_TOOLS.map(
     (t) => `<label><input type="checkbox" value="${t}"> ${t}</label>`
   ).join("\n");
+
+  const errorRateClass = data.stats.error_rate > 10 ? "danger" : data.stats.error_rate > 5 ? "warning" : "success";
+
+  const healthDot = data.health.tripleseat_status === "ready" ? "ready"
+    : data.health.tripleseat_status === "needs_oauth_setup" ? "warning" : "error";
+  const healthLabel = data.health.tripleseat_status === "ready" ? "Connected"
+    : data.health.tripleseat_status === "needs_oauth_setup" ? "Setup Required" : "Not Configured";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -407,24 +580,67 @@ export function dashboardPage(data: DashboardData): string {
         <div class="stat-value">${data.stats.calls_today}</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">API Calls This Week</div>
+        <div class="stat-label">This Week</div>
         <div class="stat-value">${data.stats.calls_this_week}</div>
+        <div class="stat-sub">${data.stats.total_calls.toLocaleString()} all-time</div>
       </div>
       <div class="stat-card">
-        <div class="stat-label">Most Used Tool</div>
-        <div class="stat-value" style="font-size: 16px; font-family: var(--mono);">${topTool}</div>
+        <div class="stat-label">Error Rate</div>
+        <div class="stat-value ${errorRateClass}">${data.stats.error_rate}%</div>
+        <div class="stat-sub">${data.stats.error_count} errors total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Response</div>
+        <div class="stat-value">${data.stats.avg_duration_ms}<span style="font-size: 12px; font-weight: 400; color: var(--text-secondary)">ms</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">TripleSeat</div>
+        <div class="stat-value" style="font-size: 15px;"><span class="connection-dot ${healthDot}"></span>${healthLabel}</div>
+        <div class="stat-sub">${data.health.active_session_count} active session${data.health.active_session_count !== 1 ? "s" : ""}</div>
       </div>
     </div>
 
     <!-- Tabs -->
     <div class="tabs">
-      <button class="tab active" data-tab="users">Users</button>
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="users">Users</button>
       <button class="tab" data-tab="roles">Roles</button>
       <button class="tab" data-tab="activity">Activity</button>
+      <button class="tab" data-tab="connections">Connections</button>
+    </div>
+
+    <!-- Overview Tab -->
+    <div class="tab-content active" id="tab-overview">
+      <div class="overview-panel overview-panel-full" style="margin-bottom: 16px">
+        <h3>Usage Trends — Last 30 Days</h3>
+        <div class="chart-container">
+          <div class="chart-bars" id="usage-chart"></div>
+        </div>
+      </div>
+
+      <div class="overview-grid">
+        <div class="overview-panel">
+          <h3>Top Tools</h3>
+          <div id="tool-breakdown">
+            ${data.stats.top_tools.length === 0
+              ? '<div class="empty-state" style="padding:24px">No tool usage yet.</div>'
+              : ""}
+          </div>
+        </div>
+
+        <div class="overview-panel">
+          <h3>Top Users</h3>
+          <div id="top-users">
+            ${data.stats.top_users.length === 0
+              ? '<div class="empty-state" style="padding:24px">No user activity yet.</div>'
+              : ""}
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Users Tab -->
-    <div class="tab-content active" id="tab-users">
+    <div class="tab-content" id="tab-users">
       <div class="toolbar">
         <h2>Users</h2>
         <button class="btn btn-primary btn-sm" onclick="toggleForm('create-user-form')">Create User</button>
@@ -540,6 +756,7 @@ export function dashboardPage(data: DashboardData): string {
     <div class="tab-content" id="tab-activity">
       <div class="toolbar">
         <h2>Activity Log</h2>
+        <button class="btn btn-secondary btn-sm" onclick="exportActivityCSV()">Export CSV</button>
       </div>
 
       <div class="filters">
@@ -578,9 +795,65 @@ export function dashboardPage(data: DashboardData): string {
                 <th>Tool</th>
                 <th>Status</th>
                 <th>Duration</th>
+                <th>Details</th>
               </tr>
             </thead>
             <tbody id="activity-table-body">
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="activity-pagination" style="display:none">
+          <div class="pagination-info" id="pagination-info"></div>
+          <div class="pagination-controls" id="pagination-controls"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Connections Tab -->
+    <div class="tab-content" id="tab-connections">
+      <div class="toolbar">
+        <h2>Connections</h2>
+      </div>
+
+      <div class="health-card">
+        <h3>TripleSeat API</h3>
+        <div class="health-row">
+          <span class="health-label">Status</span>
+          <span class="health-value ${data.health.tripleseat_status === "ready" ? "ok" : data.health.tripleseat_status === "needs_oauth_setup" ? "warn" : "err"}">
+            <span class="connection-dot ${healthDot}"></span>${healthLabel}
+          </span>
+        </div>
+        <div class="health-row">
+          <span class="health-label">Token Expires</span>
+          <span class="health-value">${data.health.tripleseat_token_expires_at
+            ? new Date(data.health.tripleseat_token_expires_at).toLocaleString()
+            : "N/A"}</span>
+        </div>
+        <div class="health-row">
+          <span class="health-label">Last Refreshed</span>
+          <span class="health-value">${data.health.tripleseat_token_updated_at
+            ? new Date(data.health.tripleseat_token_updated_at).toLocaleString()
+            : "Never"}</span>
+        </div>
+        ${data.health.tripleseat_status !== "ready"
+          ? '<div style="margin-top:12px"><a href="/auth/login" class="btn btn-primary btn-sm">Setup TripleSeat OAuth</a></div>'
+          : ""}
+      </div>
+
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:12px">OAuth Clients</h3>
+      <div class="table-wrap">
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Client</th>
+                <th>Client ID</th>
+                <th>Registered</th>
+                <th>Active Tokens</th>
+                <th>Last Active</th>
+              </tr>
+            </thead>
+            <tbody id="oauth-clients-body">
+              <tr><td colspan="5"><div class="empty-state">Loading...</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -594,6 +867,10 @@ export function dashboardPage(data: DashboardData): string {
     let usersData = ${JSON.stringify(data.users)};
     let rolesData = ${JSON.stringify(data.roles)};
     const allTools = ${JSON.stringify([...ALL_TOOLS])};
+    const statsData = ${JSON.stringify(data.stats)};
+    let activityData = [];
+    let activityPage = 1;
+    const PAGE_SIZE = 50;
 
     // ── Tabs ──
     document.querySelectorAll('.tab').forEach(tab => {
@@ -603,6 +880,7 @@ export function dashboardPage(data: DashboardData): string {
         tab.classList.add('active');
         document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
         if (tab.dataset.tab === 'activity') loadActivity();
+        if (tab.dataset.tab === 'connections') loadOAuthClients();
       });
     });
 
@@ -973,37 +1251,209 @@ export function dashboardPage(data: DashboardData): string {
       if (days !== '0') params.set('days', days);
       if (userId) params.set('user_id', userId);
       if (tool) params.set('tool_name', tool);
-      params.set('limit', '200');
+      params.set('limit', '500');
 
       try {
-        const logs = await api('/admin/api/usage?' + params.toString());
-        const tbody = document.getElementById('activity-table-body');
+        activityData = await api('/admin/api/usage?' + params.toString());
+        activityPage = 1;
+        renderActivityPage();
+      } catch (e) {
+        toast('Failed to load activity: ' + e.message, 'error');
+      }
+    }
 
-        if (logs.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No activity in this time range.</div></td></tr>';
+    function renderActivityPage() {
+      const tbody = document.getElementById('activity-table-body');
+      const paginationEl = document.getElementById('activity-pagination');
+
+      if (activityData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No activity in this time range.</div></td></tr>';
+        paginationEl.style.display = 'none';
+        return;
+      }
+
+      const totalPages = Math.ceil(activityData.length / PAGE_SIZE);
+      const start = (activityPage - 1) * PAGE_SIZE;
+      const pageData = activityData.slice(start, start + PAGE_SIZE);
+
+      tbody.innerHTML = pageData.map(l => {
+        const userName = l.user ? l.user.name : 'System';
+        const statusIcon = l.success ? '<span class="status-ok">OK</span>' : '<span class="status-err">ERR</span>';
+        const duration = l.duration_ms ? l.duration_ms + 'ms' : '-';
+        const errDetail = !l.success && l.error_message
+          ? '<span style="color:var(--danger);font-size:11px;cursor:help" title="' + esc(l.error_message) + '">View</span>'
+          : '<span style="color:var(--text-tertiary);font-size:11px">—</span>';
+        return '<tr>' +
+          '<td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">' + formatTime(l.created_at) + '</td>' +
+          '<td>' + esc(userName) + '</td>' +
+          '<td><span class="mono">' + esc(l.tool_name) + '</span></td>' +
+          '<td>' + statusIcon + '</td>' +
+          '<td style="font-size:12px;color:var(--text-secondary)">' + duration + '</td>' +
+          '<td>' + errDetail + '</td>' +
+        '</tr>';
+      }).join('');
+
+      if (totalPages > 1) {
+        paginationEl.style.display = 'flex';
+        document.getElementById('pagination-info').textContent =
+          'Showing ' + (start + 1) + '–' + Math.min(start + PAGE_SIZE, activityData.length) + ' of ' + activityData.length;
+
+        let btns = '';
+        btns += '<button class="pagination-btn" onclick="goToPage(1)" ' + (activityPage === 1 ? 'disabled' : '') + '>&laquo;</button>';
+        btns += '<button class="pagination-btn" onclick="goToPage(' + (activityPage - 1) + ')" ' + (activityPage === 1 ? 'disabled' : '') + '>&lsaquo;</button>';
+
+        const startPage = Math.max(1, activityPage - 2);
+        const endPage = Math.min(totalPages, activityPage + 2);
+        for (let i = startPage; i <= endPage; i++) {
+          btns += '<button class="pagination-btn' + (i === activityPage ? ' active' : '') + '" onclick="goToPage(' + i + ')">' + i + '</button>';
+        }
+
+        btns += '<button class="pagination-btn" onclick="goToPage(' + (activityPage + 1) + ')" ' + (activityPage === totalPages ? 'disabled' : '') + '>&rsaquo;</button>';
+        btns += '<button class="pagination-btn" onclick="goToPage(' + totalPages + ')" ' + (activityPage === totalPages ? 'disabled' : '') + '>&raquo;</button>';
+        document.getElementById('pagination-controls').innerHTML = btns;
+      } else {
+        paginationEl.style.display = 'none';
+      }
+    }
+
+    function goToPage(page) {
+      activityPage = page;
+      renderActivityPage();
+    }
+
+    function exportActivityCSV() {
+      if (activityData.length === 0) { toast('No data to export', 'error'); return; }
+
+      const headers = ['Time', 'User', 'Tool', 'Status', 'Duration (ms)', 'Error'];
+      const rows = activityData.map(l => [
+        l.created_at,
+        l.user ? l.user.name : 'System',
+        l.tool_name,
+        l.success ? 'OK' : 'ERR',
+        l.duration_ms || '',
+        l.error_message || '',
+      ]);
+
+      let csv = headers.join(',') + '\\n';
+      rows.forEach(row => {
+        csv += row.map(cell => '"' + String(cell).replace(/"/g, '""') + '"').join(',') + '\\n';
+      });
+
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'mcp-activity-' + new Date().toISOString().split('T')[0] + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('CSV exported');
+    }
+
+    // ── Overview Charts ──
+    function renderUsageChart() {
+      const container = document.getElementById('usage-chart');
+      const data = statsData.calls_per_day || [];
+
+      if (data.length === 0) {
+        container.innerHTML = '<div class="empty-state" style="height:160px;display:flex;align-items:center;justify-content:center">No usage data yet.</div>';
+        return;
+      }
+
+      const allDays = [];
+      if (data.length > 0) {
+        const startDate = new Date(data[0].date);
+        const endDate = new Date(data[data.length - 1].date);
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split('T')[0];
+          const existing = data.find(r => r.date === dateStr);
+          allDays.push({ date: dateStr, count: existing ? existing.count : 0 });
+        }
+      }
+
+      const maxCount = Math.max(...allDays.map(d => d.count), 1);
+
+      container.innerHTML = allDays.map((d, i) => {
+        const pct = (d.count / maxCount) * 100;
+        const dateObj = new Date(d.date + 'T12:00:00');
+        const label = dateObj.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        const showLabel = allDays.length <= 14 || i % Math.ceil(allDays.length / 10) === 0;
+        return '<div class="chart-bar-group">' +
+          '<div class="chart-tooltip">' + d.count + ' calls</div>' +
+          '<div class="chart-bar' + (d.count === 0 ? ' zero' : '') + '" style="height:' + Math.max(pct, 1) + '%"></div>' +
+          (showLabel ? '<span class="chart-label">' + label + '</span>' : '') +
+        '</div>';
+      }).join('');
+    }
+
+    function renderToolBreakdown() {
+      const container = document.getElementById('tool-breakdown');
+      const tools = statsData.top_tools || [];
+      if (tools.length === 0) return;
+
+      const maxCount = tools[0].count;
+      container.innerHTML = '<div class="h-bar-chart">' + tools.map(t => {
+        const pct = (t.count / maxCount) * 100;
+        return '<div class="h-bar-row">' +
+          '<span class="h-bar-label">' + esc(t.tool_name) + '</span>' +
+          '<div class="h-bar-track"><div class="h-bar-fill" style="width:' + pct + '%"></div></div>' +
+          '<span class="h-bar-value">' + t.count + '</span>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    function renderTopUsers() {
+      const container = document.getElementById('top-users');
+      const users = statsData.top_users || [];
+      if (users.length === 0) return;
+
+      container.innerHTML = '<div class="top-users-list">' + users.map((u, i) => {
+        const rankClass = i < 3 ? ' rank-' + (i + 1) : '';
+        return '<div class="top-user-row">' +
+          '<span class="top-user-rank' + rankClass + '">' + (i + 1) + '</span>' +
+          '<span class="top-user-name">' + esc(u.name) + '</span>' +
+          '<span class="top-user-count">' + u.count + ' calls</span>' +
+        '</div>';
+      }).join('') + '</div>';
+    }
+
+    // ── Connections ──
+    let connectionsLoaded = false;
+    async function loadOAuthClients() {
+      if (connectionsLoaded) return;
+      connectionsLoaded = true;
+
+      try {
+        const clients = await api('/admin/api/oauth-clients');
+        const tbody = document.getElementById('oauth-clients-body');
+
+        if (clients.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state">No OAuth clients registered yet.</div></td></tr>';
           return;
         }
 
-        tbody.innerHTML = logs.map(l => {
-          const userName = l.user ? l.user.name : 'System';
-          const statusIcon = l.success ? '<span class="status-ok">OK</span>' : '<span class="status-err">ERR</span>';
-          const duration = l.duration_ms ? l.duration_ms + 'ms' : '-';
+        tbody.innerHTML = clients.map(c => {
+          const activeTokens = parseInt(c.active_tokens) || 0;
+          const statusClass = activeTokens > 0 ? 'status-active' : 'status-inactive';
+          const statusText = activeTokens > 0 ? activeTokens + ' active' : 'No active tokens';
           return '<tr>' +
-            '<td style="font-size:12px;color:var(--text-secondary);white-space:nowrap">' + formatTime(l.created_at) + '</td>' +
-            '<td>' + esc(userName) + '</td>' +
-            '<td><span class="mono">' + esc(l.tool_name) + '</span></td>' +
-            '<td>' + statusIcon + '</td>' +
-            '<td style="font-size:12px;color:var(--text-secondary)">' + duration + '</td>' +
+            '<td><strong>' + esc(c.client_name || 'MCP Client') + '</strong></td>' +
+            '<td><span class="mono" style="font-size:11px;color:var(--text-secondary)">' + esc(c.client_id.substring(0, 20)) + '…</span></td>' +
+            '<td style="font-size:12px;color:var(--text-secondary)">' + formatTime(c.created_at) + '</td>' +
+            '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
+            '<td style="font-size:12px;color:var(--text-secondary)">' + (c.last_token_issued ? timeAgo(c.last_token_issued) : 'Never') + '</td>' +
           '</tr>';
         }).join('');
       } catch (e) {
-        toast('Failed to load activity: ' + e.message, 'error');
+        toast('Failed to load clients: ' + e.message, 'error');
       }
     }
 
     // ── Init ──
     renderUsers();
     renderRoles();
+    renderUsageChart();
+    renderToolBreakdown();
+    renderTopUsers();
   </script>
 </body>
 </html>`;

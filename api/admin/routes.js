@@ -10,6 +10,8 @@ const users_js_1 = require("../users.js");
 const roles_js_1 = require("../roles.js");
 const email_js_1 = require("../email.js");
 const usage_js_1 = require("../usage.js");
+const db_js_1 = require("../db.js");
+const auth_js_1 = require("../auth.js");
 const views_js_1 = require("./views.js");
 const router = (0, express_1.Router)();
 exports.adminRouter = router;
@@ -63,12 +65,27 @@ router.use(middleware_js_1.adminAuth);
 // Dashboard
 router.get("/dashboard", async (_req, res) => {
     try {
-        const [users, roles, stats] = await Promise.all([
+        const [users, roles, stats, tokenRow, clientCount, sessionCount] = await Promise.all([
             (0, users_js_1.listUsers)(),
             (0, roles_js_1.listRoles)(),
             (0, usage_js_1.getUsageStats)(),
+            (0, db_js_1.queryOne)(`SELECT expires_at, updated_at FROM tripleseat_tokens WHERE id = 'primary'`),
+            (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_oauth_clients`),
+            (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_oauth_tokens WHERE expires_at > NOW()`),
         ]);
-        res.type("html").send((0, views_js_1.dashboardPage)({ users, roles, stats }));
+        const tripleseatStatus = !(0, auth_js_1.hasCredentials)()
+            ? "missing_credentials"
+            : !(0, auth_js_1.hasRefreshToken)() && !tokenRow
+                ? "needs_oauth_setup"
+                : "ready";
+        const health = {
+            tripleseat_status: tripleseatStatus,
+            tripleseat_token_expires_at: tokenRow?.expires_at || null,
+            tripleseat_token_updated_at: tokenRow?.updated_at || null,
+            oauth_client_count: parseInt(clientCount?.count || "0", 10),
+            active_session_count: parseInt(sessionCount?.count || "0", 10),
+        };
+        res.type("html").send((0, views_js_1.dashboardPage)({ users, roles, stats, health }));
     }
     catch (err) {
         res.status(500).send("Dashboard error: " + err.message);
@@ -281,6 +298,48 @@ router.post("/api/seed", async (_req, res) => {
     try {
         const result = await (0, roles_js_1.seedDefaultRoles)();
         res.json(result);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ── API: Health ──
+router.get("/api/health", async (_req, res) => {
+    try {
+        const [tokenRow, clientCount, sessionCount] = await Promise.all([
+            (0, db_js_1.queryOne)(`SELECT expires_at, updated_at FROM tripleseat_tokens WHERE id = 'primary'`),
+            (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_oauth_clients`),
+            (0, db_js_1.queryOne)(`SELECT COUNT(*)::text AS count FROM mcp_oauth_tokens WHERE expires_at > NOW()`),
+        ]);
+        const tripleseatStatus = !(0, auth_js_1.hasCredentials)()
+            ? "missing_credentials"
+            : !(0, auth_js_1.hasRefreshToken)() && !tokenRow
+                ? "needs_oauth_setup"
+                : "ready";
+        res.json({
+            tripleseat_status: tripleseatStatus,
+            tripleseat_token_expires_at: tokenRow?.expires_at || null,
+            tripleseat_token_updated_at: tokenRow?.updated_at || null,
+            oauth_client_count: parseInt(clientCount?.count || "0", 10),
+            active_session_count: parseInt(sessionCount?.count || "0", 10),
+            database: true,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message, database: false });
+    }
+});
+// ── API: OAuth Clients ──
+router.get("/api/oauth-clients", async (_req, res) => {
+    try {
+        const clients = await (0, db_js_1.query)(`SELECT c.client_id, c.client_name, c.redirect_uris, c.created_at,
+              COUNT(t.token_hash) FILTER (WHERE t.expires_at > NOW()) AS active_tokens,
+              MAX(t.created_at) AS last_token_issued
+       FROM mcp_oauth_clients c
+       LEFT JOIN mcp_oauth_tokens t ON t.client_id = c.client_id
+       GROUP BY c.client_id, c.client_name, c.redirect_uris, c.created_at
+       ORDER BY c.created_at DESC`);
+        res.json(clients);
     }
     catch (err) {
         res.status(500).json({ error: err.message });

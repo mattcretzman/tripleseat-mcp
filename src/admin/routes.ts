@@ -8,6 +8,8 @@ import { authenticateUser, createUser, listUsers, updateUser, deactivateUser, re
 import { listRoles, createRole, updateRole, seedDefaultRoles, getRole } from "../roles.js";
 import { sendInviteEmail } from "../email.js";
 import { getRecentUsage, getUsageStats } from "../usage.js";
+import { query, queryOne } from "../db.js";
+import { hasCredentials, hasRefreshToken } from "../auth.js";
 import { loginPage, dashboardPage } from "./views.js";
 
 const router = Router();
@@ -71,14 +73,35 @@ router.use(adminAuth);
 // Dashboard
 router.get("/dashboard", async (_req: Request, res: Response) => {
   try {
-    const [users, roles, stats] = await Promise.all([
+    const [users, roles, stats, tokenRow, clientCount, sessionCount] = await Promise.all([
       listUsers(),
       listRoles(),
       getUsageStats(),
+      queryOne<{ expires_at: string; updated_at: string }>(
+        `SELECT expires_at, updated_at FROM tripleseat_tokens WHERE id = 'primary'`
+      ),
+      queryOne<{ count: string }>(`SELECT COUNT(*)::text AS count FROM mcp_oauth_clients`),
+      queryOne<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM mcp_oauth_tokens WHERE expires_at > NOW()`
+      ),
     ]);
 
+    const tripleseatStatus = !hasCredentials()
+      ? "missing_credentials"
+      : !hasRefreshToken() && !tokenRow
+        ? "needs_oauth_setup"
+        : "ready";
+
+    const health = {
+      tripleseat_status: tripleseatStatus,
+      tripleseat_token_expires_at: tokenRow?.expires_at || null,
+      tripleseat_token_updated_at: tokenRow?.updated_at || null,
+      oauth_client_count: parseInt(clientCount?.count || "0", 10),
+      active_session_count: parseInt(sessionCount?.count || "0", 10),
+    };
+
     res.type("html").send(
-      dashboardPage({ users, roles, stats })
+      dashboardPage({ users, roles, stats, health })
     );
   } catch (err: any) {
     res.status(500).send("Dashboard error: " + err.message);
@@ -291,6 +314,58 @@ router.post("/api/seed", async (_req: Request, res: Response) => {
   try {
     const result = await seedDefaultRoles();
     res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── API: Health ──
+
+router.get("/api/health", async (_req: Request, res: Response) => {
+  try {
+    const [tokenRow, clientCount, sessionCount] = await Promise.all([
+      queryOne<{ expires_at: string; updated_at: string }>(
+        `SELECT expires_at, updated_at FROM tripleseat_tokens WHERE id = 'primary'`
+      ),
+      queryOne<{ count: string }>(`SELECT COUNT(*)::text AS count FROM mcp_oauth_clients`),
+      queryOne<{ count: string }>(
+        `SELECT COUNT(*)::text AS count FROM mcp_oauth_tokens WHERE expires_at > NOW()`
+      ),
+    ]);
+
+    const tripleseatStatus = !hasCredentials()
+      ? "missing_credentials"
+      : !hasRefreshToken() && !tokenRow
+        ? "needs_oauth_setup"
+        : "ready";
+
+    res.json({
+      tripleseat_status: tripleseatStatus,
+      tripleseat_token_expires_at: tokenRow?.expires_at || null,
+      tripleseat_token_updated_at: tokenRow?.updated_at || null,
+      oauth_client_count: parseInt(clientCount?.count || "0", 10),
+      active_session_count: parseInt(sessionCount?.count || "0", 10),
+      database: true,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message, database: false });
+  }
+});
+
+// ── API: OAuth Clients ──
+
+router.get("/api/oauth-clients", async (_req: Request, res: Response) => {
+  try {
+    const clients = await query(
+      `SELECT c.client_id, c.client_name, c.redirect_uris, c.created_at,
+              COUNT(t.token_hash) FILTER (WHERE t.expires_at > NOW()) AS active_tokens,
+              MAX(t.created_at) AS last_token_issued
+       FROM mcp_oauth_clients c
+       LEFT JOIN mcp_oauth_tokens t ON t.client_id = c.client_id
+       GROUP BY c.client_id, c.client_name, c.redirect_uris, c.created_at
+       ORDER BY c.created_at DESC`
+    );
+    res.json(clients);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
