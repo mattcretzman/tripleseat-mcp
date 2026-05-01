@@ -225,6 +225,21 @@ router.post("/api/users/:id/deactivate", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+router.delete("/api/users/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
+        await (0, users_js_1.deleteUser)(id);
+        res.json({ ok: true });
+    }
+    catch (err) {
+        if (err.message === "User not found") {
+            res.status(404).json({ error: err.message });
+        }
+        else {
+            res.status(500).json({ error: err.message });
+        }
+    }
+});
 // ── API: Roles ──
 router.get("/api/roles", async (_req, res) => {
     try {

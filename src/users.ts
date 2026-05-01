@@ -180,7 +180,19 @@ export async function updateUser(
 }
 
 export async function deactivateUser(id: string): Promise<void> {
-  await query(`UPDATE mcp_users SET is_active = false, updated_at = NOW() WHERE id = $1`, [id]);
+  const row = await queryOne(
+    `UPDATE mcp_users SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  if (!row) throw new Error("User not found");
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const row = await queryOne(
+    `DELETE FROM mcp_users WHERE id = $1 RETURNING id`,
+    [id]
+  );
+  if (!row) throw new Error("User not found");
 }
 
 export async function resetPassword(id: string, newPassword: string): Promise<void> {

@@ -18,8 +18,8 @@ exports.LEAD_SUMMARY_FIELDS = [
     "location", "location_id", "event_date", "guest_count", "created_at", "lead_source",
 ];
 exports.BOOKING_SUMMARY_FIELDS = [
-    "id", "event_id", "status", "total", "balance_due",
-    "created_at", "location", "location_id",
+    "id", "name", "event_id", "status", "definite_date",
+    "total", "balance_due", "created_at", "location", "location_id",
 ];
 exports.CONTACT_SUMMARY_FIELDS = [
     "id", "first_name", "last_name", "email", "phone", "company", "account_id",

@@ -99,6 +99,8 @@ async function seedDefaultRoles() {
                 "list_sites",
                 "list_locations",
                 "get_location",
+                "search_bookings",
+                "search_bookings_by_definite_date",
                 "create_lead",
                 "update_lead",
                 "create_event",
@@ -121,6 +123,7 @@ async function seedDefaultRoles() {
                 "get_contact",
                 "get_account",
                 "get_location",
+                "search_bookings_by_definite_date",
             ],
         },
     ];

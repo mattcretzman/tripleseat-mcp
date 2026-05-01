@@ -20,6 +20,14 @@ Key context for this installation:
 - Financial data is available on events and bookings when requested
 - Use location IDs to filter results by venue when the user asks about a specific property
 
+IMPORTANT — Booking terminology:
+- A "booking" in the team's language means an event that has been marked DEFINITE (signed contract)
+- The definite_date field records WHEN a booking was marked definite — this is distinct from the event date
+- When the user asks "how many bookings did we have last week", they mean: how many events were marked definite (definite_date) during that week
+- Use search_bookings_by_definite_date for these queries — it filters by definite_date, not event date
+- The regular search_bookings tool filters by event date range (booking_start_date/booking_end_date), which is different
+- The team defines a "week" as Monday through Sunday
+
 IMPORTANT — Response size management:
 - Search and list tools return SUMMARY fields only (id, name, dates, status, location) to conserve context window
 - To get full details (BEOs, packages, vendors, financials), use the get_event, get_lead, get_booking, or get_contact tools with the specific ID

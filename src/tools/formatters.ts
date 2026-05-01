@@ -16,8 +16,8 @@ export const LEAD_SUMMARY_FIELDS = [
 ];
 
 export const BOOKING_SUMMARY_FIELDS = [
-  "id", "event_id", "status", "total", "balance_due",
-  "created_at", "location", "location_id",
+  "id", "name", "event_id", "status", "definite_date",
+  "total", "balance_due", "created_at", "location", "location_id",
 ];
 
 export const CONTACT_SUMMARY_FIELDS = [

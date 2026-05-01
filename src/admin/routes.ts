@@ -4,7 +4,7 @@
 
 import { Router, Request, Response } from "express";
 import { adminAuth, createAdminSession, deleteAdminSession } from "../middleware.js";
-import { authenticateUser, createUser, listUsers, updateUser, deactivateUser, resetPassword } from "../users.js";
+import { authenticateUser, createUser, listUsers, updateUser, deactivateUser, deleteUser, resetPassword } from "../users.js";
 import { listRoles, createRole, updateRole, seedDefaultRoles, getRole } from "../roles.js";
 import { sendInviteEmail } from "../email.js";
 import { getRecentUsage, getUsageStats } from "../usage.js";
@@ -239,6 +239,20 @@ router.post("/api/users/:id/deactivate", async (req: Request, res: Response) => 
     res.json({ ok: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete("/api/users/:id", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await deleteUser(id as string);
+    res.json({ ok: true });
+  } catch (err: any) {
+    if (err.message === "User not found") {
+      res.status(404).json({ error: err.message });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
   }
 });
 

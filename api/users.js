@@ -12,6 +12,7 @@ exports.listUsers = listUsers;
 exports.getUser = getUser;
 exports.updateUser = updateUser;
 exports.deactivateUser = deactivateUser;
+exports.deleteUser = deleteUser;
 exports.resetPassword = resetPassword;
 exports.changePassword = changePassword;
 exports.touchLastActive = touchLastActive;
@@ -126,7 +127,14 @@ async function updateUser(id, updates) {
     return row;
 }
 async function deactivateUser(id) {
-    await (0, db_js_1.query)(`UPDATE mcp_users SET is_active = false, updated_at = NOW() WHERE id = $1`, [id]);
+    const row = await (0, db_js_1.queryOne)(`UPDATE mcp_users SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING id`, [id]);
+    if (!row)
+        throw new Error("User not found");
+}
+async function deleteUser(id) {
+    const row = await (0, db_js_1.queryOne)(`DELETE FROM mcp_users WHERE id = $1 RETURNING id`, [id]);
+    if (!row)
+        throw new Error("User not found");
 }
 async function resetPassword(id, newPassword) {
     const passwordHash = await bcryptjs_1.default.hash(newPassword, BCRYPT_ROUNDS);

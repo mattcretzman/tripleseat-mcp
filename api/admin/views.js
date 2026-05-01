@@ -894,6 +894,11 @@ function dashboardPage(data) {
       return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     }
 
+    function escJs(s) {
+      if (!s) return '';
+      return s.replace(/\\\\/g,'\\\\\\\\').replace(/'/g,"\\\\'");
+    }
+
     // ── Users ──
     function renderUsers() {
       const tbody = document.getElementById('users-table-body');
@@ -916,12 +921,13 @@ function dashboardPage(data) {
           '</select></td>' +
           '<td><span class="' + statusClass + '">' + statusText + '</span></td>' +
           '<td style="color:var(--text-secondary);font-size:12px">' + timeAgo(u.last_active_at) + '</td>' +
-          '<td style="display:flex;gap:6px">' +
+          '<td style="display:flex;gap:6px;flex-wrap:wrap">' +
             (u.is_active
-              ? '<button class="btn btn-primary btn-sm" onclick="showResendInvite(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\', \\'' + esc(u.email) + '\\')">Send Invite</button>' +
-                '<button class="btn btn-secondary btn-sm" onclick="showResetPassword(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Reset PW</button>' +
-                '<button class="btn btn-danger btn-sm" onclick="deactivateUser(\\'' + u.id + '\\', \\'' + esc(u.name) + '\\')">Deactivate</button>'
-              : '<button class="btn btn-secondary btn-sm" onclick="reactivateUser(\\'' + u.id + '\\')">Reactivate</button>') +
+              ? '<button class="btn btn-primary btn-sm" onclick="showResendInvite(\\'' + u.id + '\\', \\'' + escJs(u.name) + '\\', \\'' + escJs(u.email) + '\\')">Send Invite</button>' +
+                '<button class="btn btn-secondary btn-sm" onclick="showResetPassword(\\'' + u.id + '\\', \\'' + escJs(u.name) + '\\')">Reset PW</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="deactivateUser(\\'' + u.id + '\\', \\'' + escJs(u.name) + '\\')">Deactivate</button>'
+              : '<button class="btn btn-secondary btn-sm" onclick="reactivateUser(\\'' + u.id + '\\')">Reactivate</button>' +
+                '<button class="btn btn-danger btn-sm" onclick="permanentlyDeleteUser(\\'' + u.id + '\\', \\'' + escJs(u.name) + '\\')">Delete</button>') +
           '</td>' +
         '</tr>';
       }).join('');
@@ -1086,6 +1092,18 @@ function dashboardPage(data) {
         usersData = await api('/admin/api/users');
         renderUsers();
         toast('User reactivated');
+      } catch (e) {
+        toast('Failed: ' + e.message, 'error');
+      }
+    }
+
+    async function permanentlyDeleteUser(userId, name) {
+      if (!confirm('PERMANENTLY delete user "' + name + '"? This cannot be undone. All their tokens and sessions will be removed.')) return;
+      try {
+        await api('/admin/api/users/' + userId, { method: 'DELETE' });
+        usersData = await api('/admin/api/users');
+        renderUsers();
+        toast('User permanently deleted');
       } catch (e) {
         toast('Failed: ' + e.message, 'error');
       }
